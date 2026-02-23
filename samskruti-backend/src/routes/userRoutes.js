@@ -1,193 +1,293 @@
+// routes/userRoutes.js
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../middlewares/authMiddleware');
 const User = require('../models/User');
 const UserProfile = require('../models/UserProfile');
+const Booking = require('../models/Booking');
+const Ticket = require('../models/Ticket');
+const Review = require('../models/Review');
 
 // Get current user profile
-// Add this to your backend userRoutes.js
 router.get('/profile', authMiddleware, async (req, res) => {
-  try {
-    console.log('Profile request for user ID:', req.user.id);
-    
-    const user = await User.findById(req.user.id);
-    const profile = await UserProfile.findByUserId(req.user.id);
-    
-    console.log('Found user:', user);
-    console.log('Found profile:', profile);
-    
-    res.json({
-      success: true,
-      data: {
-        user,
-        profile
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching profile'
-    });
-  }
+    try {
+        console.log('Profile request for user ID:', req.user.id);
+        
+        const user = await User.findById(req.user.id);
+        const profile = await UserProfile.findByUserId(req.user.id);
+        
+        console.log('Found user:', user);
+        console.log('Found profile:', profile);
+        
+        res.json({
+            success: true,
+            data: {
+                user,
+                profile
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching profile'
+        });
+    }
 });
 
 // Update user profile
 router.put('/profile', authMiddleware, async (req, res) => {
-  try {
-    const { full_name, phone, date_of_birth, gender } = req.body;
-    
-    const updatedProfile = await UserProfile.update(req.user.id, {
-      full_name,
-      phone,
-      date_of_birth,
-      gender
-    });
-    
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      data: updatedProfile
-    });
-  } catch (error) {
-    console.error('Error updating profile:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating profile'
-    });
-  }
+    try {
+        const { full_name, phone, date_of_birth, gender, city, state, country, profile_image } = req.body;
+        
+        const updatedProfile = await UserProfile.update(req.user.id, {
+            full_name,
+            phone,
+            date_of_birth,
+            gender,
+            city,
+            state,
+            country,
+            profile_image
+        });
+        
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: updatedProfile
+        });
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating profile'
+        });
+    }
 });
 
-// Get user's bookings (mock for now - will be implemented with bookings table)
+// Get user's bookings
 router.get('/bookings', authMiddleware, async (req, res) => {
-  try {
-    // This will be replaced with actual bookings query
-    const mockBookings = [
-      {
-        id: 1,
-        destination: "Coorg Valley",
-        date: "2025-03-15",
-        status: "confirmed",
-        price: 3499
-      },
-      {
-        id: 2,
-        destination: "Hampi Ruins",
-        date: "2025-04-05",
-        status: "pending",
-        price: 1999
-      }
-    ];
-    
-    res.json({
-      success: true,
-      data: mockBookings
-    });
-  } catch (error) {
-    console.error('Error fetching bookings:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching bookings'
-    });
-  }
+    try {
+        const bookings = await Booking.getUserBookings(req.user.id);
+        
+        res.json({
+            success: true,
+            data: bookings
+        });
+    } catch (error) {
+        console.error('Error fetching bookings:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching bookings'
+        });
+    }
 });
 
-// Get user's favorites
-router.get('/favorites', authMiddleware, async (req, res) => {
-  try {
-    // This will be implemented with favorites table
-    res.json({
-      success: true,
-      data: []
-    });
-  } catch (error) {
-    console.error('Error fetching favorites:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching favorites'
-    });
-  }
-});
-// Add to existing userRoutes.js
-
-// Track user view
-router.post('/track-view', authMiddleware, async (req, res) => {
-  try {
-    const { destinationId } = req.body;
-    
-    // Store in database - create user_views table if not exists
-    const query = `
-      INSERT INTO user_views (user_id, destination_id, viewed_at)
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
-    `;
-    
-    await db.query(query, [req.user.id, destinationId]);
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error tracking view:', error);
-    res.status(500).json({ success: false });
-  }
+// Get upcoming bookings
+router.get('/bookings/upcoming', authMiddleware, async (req, res) => {
+    try {
+        const bookings = await Booking.getUpcomingBookings(req.user.id);
+        
+        res.json({
+            success: true,
+            data: bookings
+        });
+    } catch (error) {
+        console.error('Error fetching upcoming bookings:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching upcoming bookings'
+        });
+    }
 });
 
-// Get user preferences
-router.get('/preferences', authMiddleware, async (req, res) => {
-  try {
-    // Get user's favorite categories based on views
-    const viewsQuery = `
-      SELECT d.category, COUNT(*) as view_count
-      FROM user_views uv
-      JOIN destinations d ON d.id = uv.destination_id
-      WHERE uv.user_id = $1
-      GROUP BY d.category
-      ORDER BY view_count DESC
-      LIMIT 3
-    `;
-    
-    const views = await db.query(viewsQuery, [req.user.id]);
-    
-    // Get user's bookings
-    const bookingsQuery = `
-      SELECT * FROM bookings WHERE user_id = $1 ORDER BY date DESC
-    `;
-    
-    const bookings = await db.query(bookingsQuery, [req.user.id]);
-    
-    res.json({
-      success: true,
-      data: {
-        favorite_categories: views.rows.map(v => v.category),
-        view_history: views.rows,
-        bookings: bookings.rows
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching preferences:', error);
-    res.status(500).json({ success: false });
-  }
+// Get past bookings
+router.get('/bookings/past', authMiddleware, async (req, res) => {
+    try {
+        const bookings = await Booking.getPastBookings(req.user.id);
+        
+        res.json({
+            success: true,
+            data: bookings
+        });
+    } catch (error) {
+        console.error('Error fetching past bookings:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching past bookings'
+        });
+    }
 });
-// src/routes/userRoutes.js - Add this GET endpoint
-router.get('/profile', authMiddleware, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    const profile = await UserProfile.findByUserId(req.user.id);
-    
-    console.log('Fetching profile for user:', req.user.id);
-    console.log('Found profile:', profile);
-    
-    res.json({
-      success: true,
-      data: {
-        user,
-        profile
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching profile:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching profile'
-    });
-  }
+
+// Get user's tickets
+router.get('/tickets', authMiddleware, async (req, res) => {
+    try {
+        const tickets = await Ticket.getUserTickets(req.user.id);
+        
+        res.json({
+            success: true,
+            data: tickets
+        });
+    } catch (error) {
+        console.error('Error fetching tickets:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching tickets'
+        });
+    }
 });
+
+// Get upcoming tickets
+router.get('/tickets/upcoming', authMiddleware, async (req, res) => {
+    try {
+        const tickets = await Ticket.getUpcomingTickets(req.user.id);
+        
+        res.json({
+            success: true,
+            data: tickets
+        });
+    } catch (error) {
+        console.error('Error fetching upcoming tickets:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching upcoming tickets'
+        });
+    }
+});
+
+// Get user's wishlist
+router.get('/wishlist', authMiddleware, async (req, res) => {
+    try {
+        const wishlist = await User.getWishlist(req.user.id);
+        
+        res.json({
+            success: true,
+            data: wishlist
+        });
+    } catch (error) {
+        console.error('Error fetching wishlist:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching wishlist'
+        });
+    }
+});
+
+// Add to wishlist
+router.post('/wishlist/:siteId', authMiddleware, async (req, res) => {
+    try {
+        const { siteId } = req.params;
+        
+        const result = await User.addToWishlist(req.user.id, siteId);
+        
+        res.json({
+            success: true,
+            message: 'Added to wishlist',
+            data: result
+        });
+    } catch (error) {
+        console.error('Error adding to wishlist:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error adding to wishlist'
+        });
+    }
+});
+
+// Remove from wishlist
+router.delete('/wishlist/:siteId', authMiddleware, async (req, res) => {
+    try {
+        const { siteId } = req.params;
+        
+        await User.removeFromWishlist(req.user.id, siteId);
+        
+        res.json({
+            success: true,
+            message: 'Removed from wishlist'
+        });
+    } catch (error) {
+        console.error('Error removing from wishlist:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error removing from wishlist'
+        });
+    }
+});
+
+// Get user's visited sites
+router.get('/visits', authMiddleware, async (req, res) => {
+    try {
+        const visits = await User.getVisitedSites(req.user.id);
+        
+        res.json({
+            success: true,
+            data: visits
+        });
+    } catch (error) {
+        console.error('Error fetching visits:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching visits'
+        });
+    }
+});
+
+// Get user's scheduled visits
+router.get('/scheduled', authMiddleware, async (req, res) => {
+    try {
+        const scheduled = await User.getScheduledVisits(req.user.id);
+        
+        res.json({
+            success: true,
+            data: scheduled
+        });
+    } catch (error) {
+        console.error('Error fetching scheduled visits:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching scheduled visits'
+        });
+    }
+});
+
+// Get user's reviews
+router.get('/reviews', authMiddleware, async (req, res) => {
+    try {
+        const reviews = await Review.getByUserId(req.user.id);
+        
+        res.json({
+            success: true,
+            data: reviews
+        });
+    } catch (error) {
+        console.error('Error fetching reviews:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching reviews'
+        });
+    }
+});
+
+// Get user statistics
+router.get('/stats', authMiddleware, async (req, res) => {
+    try {
+        const bookingStats = await Booking.getUserStats(req.user.id);
+        const ticketStats = await Ticket.getStats(req.user.id);
+        
+        res.json({
+            success: true,
+            data: {
+                bookings: bookingStats,
+                tickets: ticketStats
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching statistics'
+        });
+    }
+});
+
 module.exports = router;

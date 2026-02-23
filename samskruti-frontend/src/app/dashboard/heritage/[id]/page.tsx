@@ -4,15 +4,16 @@ import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { heritageService, HeritageSite } from "@/services/heritageService";
+import { bookingService } from "@/services/bookingService";
+import { userService } from "@/services/userService";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // Icons
@@ -25,15 +26,15 @@ const Icons = {
   Mail: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
   Users: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   Star: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>,
-  StarOutline: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>,
+  Heart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>,
+  HeartFilled: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>,
   Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
-  X: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
   Book: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
 };
 
 export default function HeritageDetailPage({ params }: PageProps) {
   const { isDarkMode } = useTheme();
-  const { user, profile } = useUser();
+  const { user } = useUser();
   const router = useRouter();
   const [site, setSite] = useState<HeritageSite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,16 +48,41 @@ export default function HeritageDetailPage({ params }: PageProps) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'highlights' | 'reviews'>('overview');
+  const [siteId, setSiteId] = useState<number | null>(null);
 
+  // Unwrap params promise
+  useEffect(() => {
+    const unwrapParams = async () => {
+      try {
+        const resolvedParams = await params;
+        setSiteId(parseInt(resolvedParams.id));
+      } catch (error) {
+        console.error('Error unwrapping params:', error);
+        router.push('/dashboard');
+      }
+    };
+    
+    unwrapParams();
+  }, [params, router]);
+
+  // Fetch site data when siteId is available
   useEffect(() => {
     const fetchSite = async () => {
+      if (!siteId) return;
+      
       try {
         setLoading(true);
-        const id = parseInt(params.id);
-        const data = await heritageService.getSiteById(id);
+        const data = await heritageService.getSiteById(siteId);
         
         if (data) {
           setSite(data);
+          
+          // Check if site is in wishlist
+          if (user) {
+            // You can implement wishlist check here
+          }
         } else {
           console.error('Site not found');
           router.push('/dashboard');
@@ -68,10 +94,8 @@ export default function HeritageDetailPage({ params }: PageProps) {
       }
     };
 
-    if (params.id) {
-      fetchSite();
-    }
-  }, [params.id, router]);
+    fetchSite();
+  }, [siteId, router, user]);
 
   const handleBookNow = async () => {
     if (!user) {
@@ -88,20 +112,22 @@ export default function HeritageDetailPage({ params }: PageProps) {
     setBookingError('');
 
     try {
-      const result = await heritageService.bookSite(
-        user.id,
-        site!.id,
-        bookingData.travelDate,
-        bookingData.travelers,
-        bookingData.specialRequests
-      );
+      const result = await bookingService.createBooking({
+        user_id: user.id,
+        site_id: site!.id,
+        travel_date: bookingData.travelDate,
+        travelers: bookingData.travelers,
+        total_amount: (site!.entry_fee_indian || 0) * bookingData.travelers,
+        special_requests: bookingData.specialRequests
+      });
 
-      if (result.success) {
+      if (result.success && result.booking) {
         setBookingSuccess(true);
         setTimeout(() => {
           setShowBookingModal(false);
           setBookingSuccess(false);
           setBookingData({ travelDate: '', travelers: 1, specialRequests: '' });
+          router.push('/dashboard/tickets');
         }, 3000);
       } else {
         setBookingError(result.error || 'Booking failed');
@@ -110,6 +136,21 @@ export default function HeritageDetailPage({ params }: PageProps) {
       setBookingError('An error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleWishlist = async () => {
+    if (!user) {
+      router.push('/auth');
+      return;
+    }
+
+    if (isWishlisted) {
+      const removed = await userService.removeFromWishlist(site!.id);
+      if (removed) setIsWishlisted(false);
+    } else {
+      const added = await userService.addToWishlist(site!.id);
+      if (added) setIsWishlisted(true);
     }
   };
 
@@ -137,7 +178,7 @@ export default function HeritageDetailPage({ params }: PageProps) {
           <h2 className="text-2xl font-bold mb-4">Site Not Found</h2>
           <button
             onClick={() => router.push('/dashboard')}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg"
+            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
           >
             Go Back
           </button>
@@ -160,16 +201,29 @@ export default function HeritageDetailPage({ params }: PageProps) {
       <main className="p-6">
         <div className="max-w-7xl mx-auto">
           
-          {/* Back Button */}
-          <button
-            onClick={() => router.back()}
-            className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
-            }`}
-          >
-            <Icons.Back />
-            <span>Back to Dashboard</span>
-          </button>
+          {/* Back Button and Actions */}
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={() => router.back()}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
+              }`}
+            >
+              <Icons.Back />
+              <span>Back</span>
+            </button>
+            
+            {user && (
+              <button
+                onClick={handleToggleWishlist}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-200"
+                }`}
+              >
+                {isWishlisted ? <Icons.HeartFilled /> : <Icons.Heart />}
+              </button>
+            )}
+          </div>
 
           {/* Hero Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -182,10 +236,18 @@ export default function HeritageDetailPage({ params }: PageProps) {
                   fill
                   className="object-cover"
                   unoptimized
+                  sizes="(max-width: 768px) 100vw, 50vw"
                 />
-                {site.type === 'UNESCO World Heritage' && (
+                {site.is_unesco && (
                   <div className="absolute top-4 left-4 bg-amber-500 text-white px-3 py-1 rounded-full text-sm font-medium">
                     UNESCO World Heritage
+                  </div>
+                )}
+                {site.rating && site.rating > 0 && (
+                  <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
+                    <span>⭐</span>
+                    <span>{site.rating.toFixed(1)}</span>
+                    {site.total_reviews && <span>({site.total_reviews})</span>}
                   </div>
                 )}
               </div>
@@ -207,6 +269,7 @@ export default function HeritageDetailPage({ params }: PageProps) {
                         fill
                         className="object-cover"
                         unoptimized
+                        sizes="(max-width: 768px) 25vw, 10vw"
                       />
                     </button>
                   ))}
@@ -219,44 +282,100 @@ export default function HeritageDetailPage({ params }: PageProps) {
               <h1 className="text-4xl font-light mb-2">{site.name}</h1>
               <div className="flex items-center gap-2 mb-4">
                 <Icons.Location />
-                <span>{site.location}, {site.district} District</span>
+                <span>{site.location}{site.district ? `, ${site.district} District` : ''}</span>
               </div>
 
               <div className="flex items-center gap-4 mb-6">
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Icons.Star key={star} />
-                  ))}
-                  <span className="ml-2 text-sm">(4.5)</span>
-                </div>
                 <span className="text-emerald-500 font-bold text-2xl">
-                  ₹{site.entry_fee_indian || 0}
+                  {site.display_price || `₹${site.entry_fee_indian || 0}`}
                 </span>
+                {site.duration_required && (
+                  <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    • {site.duration_required}
+                  </span>
+                )}
               </div>
 
-              <p className={`mb-6 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
-                {site.description}
-              </p>
-
-              {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <Icons.Clock />
-                  <p className="text-sm mt-1">Built: {site.built_in}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <Icons.Users />
-                  <p className="text-sm mt-1">By: {site.built_by}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <Icons.Calendar />
-                  <p className="text-sm mt-1">Best Time: {site.best_time_to_visit}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <Icons.Clock />
-                  <p className="text-sm mt-1">Duration: {site.duration_required}</p>
-                </div>
+              {/* Tabs */}
+              <div className="flex gap-4 mb-6 border-b border-gray-200 dark:border-gray-700">
+                {(['overview', 'highlights', 'reviews'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`pb-2 px-1 capitalize transition-colors ${
+                      activeTab === tab
+                        ? 'text-emerald-500 border-b-2 border-emerald-500'
+                        : isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}
+                  >
+                    {tab} {tab === 'reviews' && site.total_reviews ? `(${site.total_reviews})` : ''}
+                  </button>
+                ))}
               </div>
+
+              {/* Tab Content */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-6"
+                >
+                  {activeTab === 'overview' && (
+                    <>
+                      <p className={`mb-4 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
+                        {site.description}
+                      </p>
+                      
+                      {/* Quick Info Grid */}
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        {site.built_in && (
+                          <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                            <p className="text-xs opacity-70">Built</p>
+                            <p className="text-sm font-medium">{site.built_in}</p>
+                          </div>
+                        )}
+                        {site.built_by && (
+                          <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                            <p className="text-xs opacity-70">By</p>
+                            <p className="text-sm font-medium">{site.built_by}</p>
+                          </div>
+                        )}
+                        {site.architectural_style && (
+                          <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                            <p className="text-xs opacity-70">Style</p>
+                            <p className="text-sm font-medium">{site.architectural_style}</p>
+                          </div>
+                        )}
+                        {site.best_time_to_visit && (
+                          <div className={`p-3 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                            <p className="text-xs opacity-70">Best Time</p>
+                            <p className="text-sm font-medium">{site.best_time_to_visit}</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  
+                  {activeTab === 'highlights' && site.highlights && site.highlights.length > 0 && (
+                    <ul className="space-y-2">
+                      {site.highlights.map((highlight, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="text-emerald-500 mt-1">✓</span>
+                          <span>{highlight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  
+                  {activeTab === 'reviews' && (
+                    <p className={`text-center py-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Reviews coming soon...
+                    </p>
+                  )}
+                </motion.div>
+              </AnimatePresence>
 
               {/* Book Button */}
               <button
@@ -276,63 +395,64 @@ export default function HeritageDetailPage({ params }: PageProps) {
               <h2 className="text-xl font-medium mb-4">Organized by</h2>
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-2xl">
-                  {site.enterprise.company_name.charAt(0)}
+                  {site.enterprise.company_name?.charAt(0) || 'E'}
                 </div>
                 <div>
                   <h3 className="font-bold">{site.enterprise.company_name}</h3>
-                  <p className="text-sm opacity-75 flex items-center gap-2">
-                    {site.enterprise.verified && (
-                      <>
-                        <span className="text-emerald-500">✓ Verified Partner</span>
-                      </>
-                    )}
-                  </p>
+                  {site.enterprise.verified && (
+                    <p className="text-sm text-emerald-500 flex items-center gap-1 mt-1">
+                      <span>✓</span> Verified Partner
+                    </p>
+                  )}
+                  {(site.enterprise.contact_phone || site.enterprise.contact_email) && (
+                    <div className="mt-2 space-y-1">
+                      {site.enterprise.contact_phone && (
+                        <p className="text-sm flex items-center gap-2">
+                          <Icons.Phone /> {site.enterprise.contact_phone}
+                        </p>
+                      )}
+                      {site.enterprise.contact_email && (
+                        <p className="text-sm flex items-center gap-2">
+                          <Icons.Mail /> {site.enterprise.contact_email}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Highlights */}
-          {site.highlights && site.highlights.length > 0 && (
-            <div className={`mb-8 p-6 rounded-xl ${
-              isDarkMode ? "bg-gray-800" : "bg-white shadow-lg"
-            }`}>
-              <h2 className="text-xl font-medium mb-4">Highlights</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {site.highlights.map((highlight, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <span className="text-emerald-500">✓</span>
-                    <span>{highlight}</span>
-                  </div>
-                ))}
               </div>
             </div>
           )}
 
           {/* Contact Info */}
-          <div className={`mb-8 p-6 rounded-xl ${
-            isDarkMode ? "bg-gray-800" : "bg-white shadow-lg"
-          }`}>
-            <h2 className="text-xl font-medium mb-4">Contact Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
-                <Icons.Phone />
-                <span>{site.contact_phone || '+91 80 4123 4567'}</span>
+          {(site.contact_phone || site.contact_email || site.website) && (
+            <div className={`mb-8 p-6 rounded-xl ${
+              isDarkMode ? "bg-gray-800" : "bg-white shadow-lg"
+            }`}>
+              <h2 className="text-xl font-medium mb-4">Contact Information</h2>
+              <div className="space-y-3">
+                {site.contact_phone && (
+                  <div className="flex items-center gap-3">
+                    <Icons.Phone />
+                    <span>{site.contact_phone}</span>
+                  </div>
+                )}
+                {site.contact_email && (
+                  <div className="flex items-center gap-3">
+                    <Icons.Mail />
+                    <span>{site.contact_email}</span>
+                  </div>
+                )}
+                {site.website && (
+                  <div className="flex items-center gap-3">
+                    <Icons.Book />
+                    <a href={site.website} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">
+                      Visit Website
+                    </a>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3">
-                <Icons.Mail />
-                <span>{site.contact_email || 'bookings@karnatakaheritage.com'}</span>
-              </div>
-              {site.website && (
-                <div className="flex items-center gap-3">
-                  <Icons.Book />
-                  <a href={site.website} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">
-                    Visit Website
-                  </a>
-                </div>
-              )}
             </div>
-          </div>
+          )}
 
           {/* Tags */}
           {site.tags && site.tags.length > 0 && (
@@ -377,18 +497,24 @@ export default function HeritageDetailPage({ params }: PageProps) {
                     <Icons.Check />
                   </div>
                   <h3 className="text-xl font-bold mb-2">Booking Successful!</h3>
-                  <p className="mb-4">Your booking has been confirmed. Check your email for details.</p>
+                  <p className="mb-4">Your booking has been confirmed. Check your tickets page for details.</p>
                   <button
-                    onClick={() => setShowBookingModal(false)}
-                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg"
+                    onClick={() => {
+                      setShowBookingModal(false);
+                      router.push('/dashboard/tickets');
+                    }}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
                   >
-                    Close
+                    View Tickets
                   </button>
                 </div>
               ) : (
                 <>
                   <h2 className="text-2xl font-bold mb-4">Book Your Visit</h2>
-                  <p className="mb-6">{site.name}</p>
+                  <p className="mb-2">{site.name}</p>
+                  <p className={`text-sm mb-6 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {site.location}
+                  </p>
 
                   <div className="space-y-4">
                     <div>
