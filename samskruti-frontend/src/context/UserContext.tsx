@@ -1,34 +1,37 @@
 // context/UserContext.tsx
 "use client";
 
-import { createContext, useContext, useState, useEffect } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { createContext, useContext, useEffect, useState } from "react";
 
 interface User {
   id: number;
   email: string;
   user_type: string;
+  email_verified?: boolean;
 }
 
 interface UserProfile {
-  id: number;
-  full_name: string;
+  full_name?: string;
   phone?: string;
   date_of_birth?: string;
   gender?: string;
-  profile_picture?: string;
-  preferences?: any;
+  city?: string;
+  state?: string;
+  country?: string;
+  profile_image?: string;
 }
 
 interface UserContextType {
   user: User | null;
   profile: UserProfile | null;
   isLoading: boolean;
-  updateProfile: (data: any) => Promise<boolean>;
+  updateProfile: (data: Partial<UserProfile>) => Promise<boolean>;
+  logout: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -36,7 +39,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchUserData();
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetchUserData();
+    } else {
+      setIsLoading(false);
+    }
   }, []);
 
   const fetchUserData = async () => {
@@ -47,8 +55,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      console.log('Fetching user data from:', `${API_URL}/auth/me`); // Fixed: removed duplicate /api
-      
       const response = await fetch(`${API_URL}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -60,7 +66,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json();
-      console.log('User data received:', data);
       
       if (data.success) {
         setUser(data.data.user);
@@ -68,14 +73,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Failed to fetch user data:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateProfile = async (data: any): Promise<boolean> => {
+  const updateProfile = async (data: Partial<UserProfile>): Promise<boolean> => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return false;
+
       const response = await fetch(`${API_URL}/user/profile`, {
         method: 'PUT',
         headers: {
@@ -85,24 +94,28 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(data)
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to update profile');
-      }
-
       const result = await response.json();
+      
       if (result.success) {
-        await fetchUserData(); // Refresh user data
+        setProfile(prev => ({ ...prev, ...result.data }));
         return true;
       }
       return false;
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('Failed to update profile:', error);
       return false;
     }
   };
 
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    setUser(null);
+    setProfile(null);
+  };
+
   return (
-    <UserContext.Provider value={{ user, profile, isLoading, updateProfile }}>
+    <UserContext.Provider value={{ user, profile, isLoading, updateProfile, logout }}>
       {children}
     </UserContext.Provider>
   );

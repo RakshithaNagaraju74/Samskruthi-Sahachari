@@ -1,3 +1,4 @@
+// models/UserProfile.js
 const db = require('../config/database');
 
 class UserProfile {
@@ -8,25 +9,34 @@ class UserProfile {
       phone,
       date_of_birth,
       gender,
-      profile_picture,
-      preferences
+      profile_image, // Changed from profile_picture to profile_image
+      city,
+      state,
+      country,
+      preferred_language,
+      interests
     } = profileData;
 
     const query = `
       INSERT INTO user_profiles (
-        user_id, full_name, phone, date_of_birth, gender, profile_picture, preferences
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        user_id, full_name, phone, date_of_birth, gender, profile_image,
+        city, state, country, preferred_language, interests, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
       RETURNING *
     `;
     
     const values = [
       user_id,
-      full_name,
+      full_name || null,
       phone || null,
       date_of_birth || null,
       gender || null,
-      profile_picture || null,
-      preferences || {}
+      profile_image || null,
+      city || null,
+      state || null,
+      country || 'India',
+      preferred_language || 'English',
+      interests || []
     ];
 
     const result = await db.query(query, values);
@@ -42,7 +52,8 @@ class UserProfile {
   static async update(userId, updateData) {
     const allowedFields = [
       'full_name', 'phone', 'date_of_birth', 'gender', 
-      'profile_picture', 'preferences'
+      'profile_image', 'city', 'state', 'country', 
+      'preferred_language', 'interests'
     ];
 
     const updates = [];
@@ -62,7 +73,7 @@ class UserProfile {
     values.push(userId);
     const query = `
       UPDATE user_profiles 
-      SET ${updates.join(', ')}
+      SET ${updates.join(', ')}, updated_at = NOW()
       WHERE user_id = $${paramIndex}
       RETURNING *
     `;
