@@ -1,4 +1,3 @@
-// routes/heritageRoutes.js
 const express = require('express');
 const router = express.Router();
 const HeritageSite = require('../models/HeritageSite');
@@ -30,6 +29,15 @@ router.get('/sites', async (req, res) => {
 router.get('/sites/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // Validate ID
+        if (isNaN(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid site ID'
+            });
+        }
+
         const site = await HeritageSite.findById(id);
         
         if (!site) {
@@ -59,6 +67,14 @@ router.get('/sites/:id', async (req, res) => {
 router.get('/sites/category/:category', async (req, res) => {
     try {
         const { category } = req.params;
+        
+        if (!category) {
+            return res.status(400).json({
+                success: false,
+                message: 'Category is required'
+            });
+        }
+
         const sites = await HeritageSite.getByCategory(category);
         
         res.json({
@@ -68,6 +84,34 @@ router.get('/sites/category/:category', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching sites by category:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch sites'
+        });
+    }
+});
+
+// Get sites by site type
+router.get('/sites/type/:siteType', async (req, res) => {
+    try {
+        const { siteType } = req.params;
+        
+        if (!siteType) {
+            return res.status(400).json({
+                success: false,
+                message: 'Site type is required'
+            });
+        }
+
+        const sites = await HeritageSite.getBySiteType(siteType);
+        
+        res.json({
+            success: true,
+            data: sites,
+            count: sites.length
+        });
+    } catch (error) {
+        console.error('Error fetching sites by type:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch sites'
@@ -97,7 +141,8 @@ router.get('/unesco', async (req, res) => {
 // Get featured sites
 router.get('/featured', async (req, res) => {
     try {
-        const sites = await HeritageSite.getFeatured();
+        const limit = req.query.limit ? parseInt(req.query.limit) : 6;
+        const sites = await HeritageSite.getFeatured(limit);
         
         res.json({
             success: true,
@@ -118,14 +163,14 @@ router.get('/search', async (req, res) => {
     try {
         const { q } = req.query;
         
-        if (!q) {
+        if (!q || q.trim() === '') {
             return res.status(400).json({
                 success: false,
                 message: 'Search query is required'
             });
         }
 
-        const sites = await HeritageSite.search(q);
+        const sites = await HeritageSite.search(q.trim());
         
         res.json({
             success: true,
@@ -146,6 +191,14 @@ router.get('/search', async (req, res) => {
 router.get('/district/:district', async (req, res) => {
     try {
         const { district } = req.params;
+        
+        if (!district) {
+            return res.status(400).json({
+                success: false,
+                message: 'District is required'
+            });
+        }
+
         const sites = await HeritageSite.getByDistrict(district);
         
         res.json({
@@ -155,6 +208,34 @@ router.get('/district/:district', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching sites by district:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch sites'
+        });
+    }
+});
+
+// Get sites by enterprise
+router.get('/enterprise/:enterpriseId', async (req, res) => {
+    try {
+        const { enterpriseId } = req.params;
+        
+        if (isNaN(enterpriseId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid enterprise ID'
+            });
+        }
+
+        const sites = await HeritageSite.getByEnterpriseId(enterpriseId);
+        
+        res.json({
+            success: true,
+            data: sites,
+            count: sites.length
+        });
+    } catch (error) {
+        console.error('Error fetching sites by enterprise:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to fetch sites'
@@ -193,11 +274,18 @@ router.get('/nearby', async (req, res) => {
             });
         }
 
-        const sites = await HeritageSite.getNearby(
-            parseFloat(lat), 
-            parseFloat(lng), 
-            radius ? parseFloat(radius) : 50
-        );
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lng);
+        const parsedRadius = radius ? parseFloat(radius) : 50;
+
+        if (isNaN(parsedLat) || isNaN(parsedLng) || isNaN(parsedRadius)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid coordinates or radius'
+            });
+        }
+
+        const sites = await HeritageSite.getNearby(parsedLat, parsedLng, parsedRadius);
         
         res.json({
             success: true,
@@ -249,10 +337,63 @@ router.get('/categories', async (req, res) => {
     }
 });
 
+// Get all site types
+router.get('/site-types', async (req, res) => {
+    try {
+        const siteTypes = await HeritageSite.getSiteTypes();
+        
+        res.json({
+            success: true,
+            data: siteTypes
+        });
+    } catch (error) {
+        console.error('Error fetching site types:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch site types'
+        });
+    }
+});
+
+// Get site statistics
+router.get('/stats', async (req, res) => {
+    try {
+        const stats = await HeritageSite.getStats();
+        
+        res.json({
+            success: true,
+            data: stats
+        });
+    } catch (error) {
+        console.error('Error fetching site stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch site statistics'
+        });
+    }
+});
+
 // Get reviews for a site
 router.get('/sites/:id/reviews', async (req, res) => {
     try {
         const { id } = req.params;
+        
+        if (isNaN(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid site ID'
+            });
+        }
+
+        // Check if site exists
+        const site = await HeritageSite.findById(id);
+        if (!site) {
+            return res.status(404).json({
+                success: false,
+                message: 'Heritage site not found'
+            });
+        }
+
         const reviews = await Review.getBySiteId(id);
         
         res.json({
@@ -276,10 +417,34 @@ router.post('/sites/:id/reviews', authMiddleware, async (req, res) => {
         const userId = req.user.id;
         const { rating, title, comment, visit_date } = req.body;
 
+        if (isNaN(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid site ID'
+            });
+        }
+
+        // Check if site exists
+        const site = await HeritageSite.findById(id);
+        if (!site) {
+            return res.status(404).json({
+                success: false,
+                message: 'Heritage site not found'
+            });
+        }
+
+        // Validate input
         if (!rating || !comment) {
             return res.status(400).json({
                 success: false,
                 message: 'Rating and comment are required'
+            });
+        }
+
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({
+                success: false,
+                message: 'Rating must be between 1 and 5'
             });
         }
 

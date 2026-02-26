@@ -19,20 +19,30 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config: any) => {
+    // Add detailed request logging
+    console.log('🔍 [API Request] ==================================');
+    console.log(`📍 URL: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    console.log(`📦 Data:`, config.data || 'No data');
+    console.log(`🔑 Headers:`, {
+      ...config.headers,
+      Authorization: config.headers?.Authorization ? 'Bearer [HIDDEN]' : 'None'
+    });
+    
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token');
+      const refreshToken = localStorage.getItem('refreshToken');
+      console.log(`🪙 Token in localStorage:`, token ? 'Present' : 'Missing');
+      console.log(`🔄 Refresh Token:`, refreshToken ? 'Present' : 'Missing');
+      
       if (token) {
         config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        console.warn('⚠️ No token found in localStorage!');
       }
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        `🚀 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`
-      );
-    }
-
+    console.log('==================================================');
     return config;
   },
   (error: any) => {
@@ -47,31 +57,41 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response: any) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`
-      );
-    }
+    console.log('✅ [API Response] =================================');
+    console.log(`📍 URL: ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    console.log(`📊 Status: ${response.status} ${response.statusText}`);
+    console.log(`📦 Data:`, response.data);
+    console.log('==================================================');
     return response;
   },
   async (error: any) => {
+    console.error('❌ [API Error] ==================================');
+    console.error(`📍 URL: ${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+    console.error(`📊 Status: ${error.response?.status} ${error.response?.statusText}`);
+    console.error(`📦 Error Data:`, error.response?.data);
+    console.error(`💬 Message:`, error.message);
+    console.error('==================================================');
+
     const originalRequest = error.config;
 
     if (!originalRequest) {
       return Promise.reject(error);
     }
 
-    // Prevent infinite loop
+    // Handle 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
+      console.warn('🔐 401 Unauthorized detected - attempting token refresh');
       originalRequest._retry = true;
 
       try {
-        const refreshToken =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('refreshToken')
-            : null;
+        const refreshToken = typeof window !== 'undefined'
+          ? localStorage.getItem('refreshToken')
+          : null;
+
+        console.log('🔄 Refresh token:', refreshToken ? 'Present' : 'Missing');
 
         if (!refreshToken) {
+          console.error('❌ No refresh token available - redirecting to login');
           if (typeof window !== 'undefined') {
             localStorage.clear();
             window.location.href = '/auth';
@@ -79,7 +99,8 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        // Properly type refresh response
+        console.log('🔄 Attempting to refresh token...');
+        
         const refreshResponse = await axios.post<{
           token: string;
           refreshToken?: string;
@@ -87,27 +108,30 @@ api.interceptors.response.use(
           refreshToken,
         });
 
+        console.log('✅ Token refresh response:', refreshResponse.data);
+
         const newToken = refreshResponse.data.token;
 
         // Store new tokens
         localStorage.setItem('token', newToken);
+        console.log('✅ New token stored');
 
         if (refreshResponse.data.refreshToken) {
-          localStorage.setItem(
-            'refreshToken',
-            refreshResponse.data.refreshToken
-          );
+          localStorage.setItem('refreshToken', refreshResponse.data.refreshToken);
+          console.log('✅ New refresh token stored');
         }
 
         // Update header and retry request
         originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
 
+        console.log('🔄 Retrying original request with new token...');
         return api(originalRequest);
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-
+        console.error('❌ Token refresh failed:', refreshError);
+        
         if (typeof window !== 'undefined') {
+          console.log('🚪 Redirecting to login...');
           localStorage.clear();
           window.location.href = '/auth';
         }
@@ -126,14 +150,25 @@ api.interceptors.response.use(
 
 export const handleApiError = (error: any): string => {
   if (error.response) {
+    // The request was made and the server responded with a status code
+    // that falls out of the range of 2xx
+    console.error('❌ Server Error Response:', {
+      data: error.response.data,
+      status: error.response.status,
+      headers: error.response.headers,
+    });
     return (
       error.response.data?.message ||
-      error.message ||
-      'An error occurred'
+      error.response.data?.error ||
+      `Server error: ${error.response.status}`
     );
   } else if (error.request) {
+    // The request was made but no response was received
+    console.error('❌ No Response Received:', error.request);
     return 'No response from server. Please check your internet connection.';
   } else {
+    // Something happened in setting up the request that triggered an Error
+    console.error('❌ Request Setup Error:', error.message);
     return error.message || 'An unexpected error occurred';
   }
 };

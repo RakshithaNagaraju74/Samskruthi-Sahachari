@@ -1288,109 +1288,49 @@ export default function Home() {
       </section>
 
       {/* ================= PREMIUM FOOTER ================= */}
-      <footer className={`border-t transition-colors duration-500 ${
-        isDarkMode ? "border-white/10 bg-black/50" : "border-gray-200 bg-white"
-      } backdrop-blur-sm`}>
-        <div className="max-w-7xl mx-auto px-6 py-12">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div className="col-span-2">
-              <h3 className={`text-xl font-light mb-3 ${
-                isDarkMode ? "text-white" : "text-gray-900"
-              }`}>
-                Samskruthi<span className="text-emerald-400">.</span>
-              </h3>
-              <p className={`text-xs leading-relaxed max-w-sm ${
-                isDarkMode ? "text-white/40" : "text-gray-500"
-              }`}>
-                Thoughtful journeys through Karnataka's cultural landscape — 
-                where every destination has a story waiting to be discovered.
-              </p>
-              
-              {/* Newsletter Signup */}
-              <div className="mt-6 flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  className={`flex-1 px-3 py-2 rounded-full text-xs placeholder:text-xs focus:outline-none transition-colors ${
-                    isDarkMode 
-                      ? "bg-white/5 text-white placeholder-white/20 border border-white/10 focus:border-emerald-400" 
-                      : "bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-200 focus:border-emerald-400"
-                  }`}
-                />
-                <button className="px-4 py-2 bg-emerald-500 rounded-full text-xs font-medium hover:bg-emerald-600 transition-colors">
-                  Subscribe
-                </button>
-              </div>
-            </div>
+      {/* ================= PREMIUM FOOTER ================= */}
+<footer className={`border-t transition-colors duration-500 ${
+  isDarkMode ? "border-white/10 bg-black/50" : "border-gray-200 bg-white"
+} backdrop-blur-sm`}>
+  <div className="max-w-7xl mx-auto px-6 py-12">
+    {/* ... existing footer content ... */}
 
-            {[
-              {
-                title: "Explore",
-                links: ["Destinations", "Experiences", "Gallery", "Journal", "Map"],
-              },
-              {
-                title: "Connect",
-                links: ["Contact", "Newsletter", "Instagram", "Twitter", "Support"],
-              },
-            ].map((section, index) => (
-              <div key={index}>
-                <h4 className={`text-xs font-medium mb-4 ${
-                  isDarkMode ? "text-white/60" : "text-gray-600"
-                }`}>{section.title}</h4>
-                <ul className="space-y-2">
-                  {section.links.map((link, linkIndex) => (
-                    <li key={linkIndex}>
-                      <a href="#" className={`text-xs transition-colors ${
-                        isDarkMode ? "text-white/40 hover:text-emerald-400" : "text-gray-500 hover:text-emerald-500"
-                      }`}>
-                        {link}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          {/* Stats Footer */}
-          <div className={`mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 py-6 border-t ${
-            isDarkMode ? "border-white/10" : "border-gray-200"
-          }`}>
-            {footerStats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-lg font-light text-emerald-400">{stat.value}</div>
-                <div className={`text-[10px] mt-1 ${
-                  isDarkMode ? "text-white/40" : "text-gray-500"
-                }`}>{stat.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Social Links */}
-          <div className={`mt-6 pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4 ${
-            isDarkMode ? "border-white/10" : "border-gray-200"
-          }`}>
-            <p className={`text-[10px] ${
-              isDarkMode ? "text-white/40" : "text-gray-400"
-            }`}>
-              © 2025 Samskruthi Sahaachari — Cultural travel experiences
-            </p>
-            <div className="flex gap-4">
-              {["Twitter", "Instagram", "Facebook", "YouTube"].map((social, index) => (
-                <a
-                  key={index}
-                  href="#"
-                  className={`text-[10px] transition-colors ${
-                    isDarkMode ? "text-white/40 hover:text-emerald-400" : "text-gray-400 hover:text-emerald-500"
-                  }`}
-                >
-                  {social}
-                </a>
-              ))}
-            </div>
-          </div>
-        </div>
-      </footer>
+    {/* Social Links */}
+    <div className={`mt-6 pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4 ${
+      isDarkMode ? "border-white/10" : "border-gray-200"
+    }`}>
+      <p className={`text-[10px] ${
+        isDarkMode ? "text-white/40" : "text-gray-400"
+      }`}>
+        © 2025 Samskruthi Sahaachari — Cultural travel experiences
+      </p>
+      <div className="flex gap-4 items-center">
+        {["Twitter", "Instagram", "Facebook", "YouTube"].map((social, index) => (
+          <a
+            key={index}
+            href="#"
+            className={`text-[10px] transition-colors ${
+              isDarkMode ? "text-white/40 hover:text-emerald-400" : "text-gray-400 hover:text-emerald-500"
+            }`}
+          >
+            {social}
+          </a>
+        ))}
+        {/* Add Admin Login Link */}
+        <Link 
+          href="/admin/login"
+          className={`text-[8px] px-2 py-1 rounded-full border transition-colors ${
+            isDarkMode 
+              ? "border-white/10 text-white/30 hover:text-white/60 hover:border-white/20" 
+              : "border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300"
+          }`}
+        >
+          Admin
+        </Link>
+      </div>
+    </div>
+  </div>
+</footer>
 
       <style jsx>{`
         @keyframes float {

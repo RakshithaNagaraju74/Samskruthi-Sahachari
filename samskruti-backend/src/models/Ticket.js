@@ -1,4 +1,4 @@
-// models/Ticket.js
+// models/Ticket.js - Complete updated version
 const db = require('../config/database');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
@@ -19,7 +19,7 @@ class Ticket {
 
     // Create ticket hash for verification
     static createTicketHash(data) {
-        const hashString = `${data.ticketNumber}:${data.userId}:${data.siteId}:${data.travelDate}:${data.nonce}`;
+        const hashString = `${data.ticketNumber}:${data.userId}:${data.siteId}:${data.nonce}`;
         return crypto.createHash('sha256').update(hashString).digest('hex');
     }
 
@@ -41,37 +41,36 @@ class Ticket {
 
     // Create a new ticket
     static async create(ticketData) {
-        const client = await db.connect();
         try {
-            await client.query('BEGIN');
-
             const {
                 booking_id,
                 user_id,
                 site_id,
                 site_name,
                 site_location,
-                travel_date,
-                travelers,
-                total_price
+                travel_date // Add travel_date to ticket creation
             } = ticketData;
 
             // Generate ticket data
             const ticketNumber = this.generateTicketNumber();
             const qrToken = this.generateQRToken();
-            const nonce = crypto.randomBytes(16).toString('hex');
             
+            const nonce = crypto.randomBytes(16).toString('hex');
             const ticketHash = this.createTicketHash({
                 ticketNumber,
                 userId: user_id,
                 siteId: site_id,
-                travelDate: travel_date,
                 nonce
             });
 
-            // Set expiry (travel date + 1 day)
-            const expiresAt = new Date(travel_date);
-            expiresAt.setDate(expiresAt.getDate() + 1);
+            // Set expiry (7 days from now by default, or based on travel date)
+            const expiresAt = new Date();
+            if (travel_date) {
+                // If travel date is provided, set expiry to 7 days after travel date
+                expiresAt.setDate(new Date(travel_date).getDate() + 7);
+            } else {
+                expiresAt.setDate(expiresAt.getDate() + 7); // Default 7 days from issue
+            }
 
             // Generate QR code
             const qrCode = await this.generateQRCode({
@@ -81,41 +80,45 @@ class Ticket {
 
             const query = `
                 INSERT INTO tickets (
-                    ticket_number, booking_id, user_id, site_id,
-                    site_name, site_location, travel_date, travelers,
-                    total_price, qr_code, qr_token, hash, nonce,
-                    expires_at, status, issued_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'active', NOW())
+                    ticket_number,
+                    booking_id,
+                    user_id,
+                    site_id,
+                    site_name,
+                    site_location,
+                    travel_date,
+                    qr_code,
+                    status,
+                    issued_at,
+                    expires_at,
+                    created_at,
+                    updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING *
             `;
 
+            const now = new Date();
             const values = [
                 ticketNumber,
                 booking_id,
                 user_id,
                 site_id,
-                site_name,
-                site_location,
-                travel_date,
-                travelers,
-                total_price,
+                site_name || '',
+                site_location || '',
+                travel_date || null, // Store travel date
                 qrCode,
-                qrToken,
-                ticketHash,
-                nonce,
-                expiresAt
+                'active',
+                now,
+                expiresAt,
+                now,
+                now
             ];
 
-            const result = await client.query(query, values);
-
-            await client.query('COMMIT');
+            const result = await db.query(query, values);
             return result.rows[0];
         } catch (error) {
-            await client.query('ROLLBACK');
             console.error('Error creating ticket:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 
@@ -124,12 +127,9 @@ class Ticket {
         try {
             const query = `
                 SELECT t.*, 
-                       u.email as user_email, u.user_type,
-                       hs.name as site_name, hs.location as site_location,
-                       hs.main_image as site_image, hs.description
+                       u.email as user_email
                 FROM tickets t
                 JOIN users u ON t.user_id = u.id
-                JOIN heritage_sites hs ON t.site_id = hs.id
                 WHERE t.ticket_number = $1
             `;
             const result = await db.query(query, [ticketNumber]);
@@ -144,10 +144,8 @@ class Ticket {
     static async getUserTickets(userId, includeHistory = false) {
         try {
             let query = `
-                SELECT t.*, hs.name as site_name, hs.location as site_location,
-                       hs.main_image as site_image
+                SELECT t.*
                 FROM tickets t
-                JOIN heritage_sites hs ON t.site_id = hs.id
                 WHERE t.user_id = $1
             `;
             
@@ -155,7 +153,7 @@ class Ticket {
                 query += ` AND t.status = 'active'`;
             }
             
-            query += ` ORDER BY t.travel_date DESC`;
+            query += ` ORDER BY t.issued_at DESC`;
 
             const result = await db.query(query, [userId]);
             return result.rows;
@@ -165,18 +163,149 @@ class Ticket {
         }
     }
 
+    // ============= MARK TICKET AS USED AFTER TRAVEL DATE =============
+    static async markAsUsedAfterTravelDate(ticketId) {
+        try {
+            const query = `
+                UPDATE tickets 
+                SET status = 'used', 
+                    used_at = NOW(), 
+                    updated_at = NOW(),
+                    usage_method = 'auto_after_travel'
+                WHERE id = $1 AND status = 'active'
+                RETURNING *
+            `;
+            
+            const result = await db.query(query, [ticketId]);
+            
+            if (result.rows.length > 0) {
+                console.log(`✅ Ticket ${result.rows[0].ticket_number} marked as used (after travel date)`);
+                return result.rows[0];
+            }
+            return null;
+        } catch (error) {
+            console.error('Error marking ticket as used after travel date:', error);
+            throw error;
+        }
+    }
+
+    // ============= MARK TICKET AS USED (QR SCAN / CHECK-IN) =============
+    static async markAsUsed(ticketNumber, method = 'qr_scan', location = null) {
+        try {
+            const ticket = await this.findByTicketNumber(ticketNumber);
+            
+            if (!ticket) {
+                return { success: false, message: 'Ticket not found' };
+            }
+            
+            if (ticket.status !== 'active') {
+                return { success: false, message: `Ticket cannot be used. Current status: ${ticket.status}` };
+            }
+            
+            // Check if ticket is expired
+            if (new Date(ticket.expires_at) < new Date()) {
+                await this.updateStatus(ticket.id, 'expired');
+                return { success: false, message: 'Ticket has expired' };
+            }
+            
+            const query = `
+                UPDATE tickets 
+                SET status = 'used', 
+                    used_at = NOW(), 
+                    updated_at = NOW(),
+                    usage_method = $1,
+                    usage_location = $2
+                WHERE id = $3
+                RETURNING *
+            `;
+            
+            const result = await db.query(query, [method, location, ticket.id]);
+            
+            return { 
+                success: true, 
+                message: 'Ticket marked as used successfully',
+                ticket: result.rows[0]
+            };
+        } catch (error) {
+            console.error('Error marking ticket as used:', error);
+            throw error;
+        }
+    }
+
+    // ============= MARK EXPIRED TICKETS =============
+    static async markExpiredTickets() {
+        try {
+            const query = `
+                UPDATE tickets 
+                SET status = 'expired', 
+                    updated_at = NOW()
+                WHERE status = 'active' 
+                  AND expires_at < NOW()
+                RETURNING id, ticket_number, site_name, user_id
+            `;
+            
+            const result = await db.query(query);
+            
+            console.log(`✅ Marked ${result.rows.length} tickets as expired`);
+            
+            // Log each expired ticket
+            result.rows.forEach(ticket => {
+                console.log(`   - Ticket ${ticket.ticket_number} for ${ticket.site_name} expired`);
+            });
+            
+            return result.rows;
+        } catch (error) {
+            console.error('Error marking expired tickets:', error);
+            throw error;
+        }
+    }
+
+    // ============= PROCESS TRAVEL DATES =============
+    static async processTravelDates() {
+        try {
+            // Get today's date at midnight
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Find tickets where travel date was yesterday or earlier and still active
+            const query = `
+                UPDATE tickets 
+                SET status = 'used', 
+                    used_at = NOW(), 
+                    updated_at = NOW(),
+                    usage_method = 'auto_after_travel'
+                WHERE status = 'active' 
+                  AND travel_date IS NOT NULL 
+                  AND travel_date < $1
+                RETURNING id, ticket_number, site_name, user_id, travel_date
+            `;
+            
+            const result = await db.query(query, [today]);
+            
+            console.log(`✅ Marked ${result.rows.length} tickets as used (travel date passed)`);
+            
+            // Log each ticket
+            result.rows.forEach(ticket => {
+                console.log(`   - Ticket ${ticket.ticket_number} for ${ticket.site_name} marked as used (travel date: ${ticket.travel_date})`);
+            });
+            
+            return result.rows;
+        } catch (error) {
+            console.error('Error processing travel dates:', error);
+            throw error;
+        }
+    }
+
     // Get upcoming tickets
     static async getUpcomingTickets(userId) {
         try {
             const query = `
-                SELECT t.*, hs.name as site_name, hs.location as site_location,
-                       hs.main_image as site_image
+                SELECT t.*
                 FROM tickets t
-                JOIN heritage_sites hs ON t.site_id = hs.id
                 WHERE t.user_id = $1 
                   AND t.status = 'active'
-                  AND t.travel_date >= CURRENT_DATE
-                ORDER BY t.travel_date
+                  AND t.expires_at >= CURRENT_DATE
+                ORDER BY t.expires_at
             `;
             const result = await db.query(query, [userId]);
             return result.rows;
@@ -188,62 +317,28 @@ class Ticket {
 
     // Verify ticket
     static async verify(ticketNumber, qrToken) {
-        const client = await db.connect();
         try {
-            await client.query('BEGIN');
-
-            // Get ticket
             const ticket = await this.findByTicketNumber(ticketNumber);
             
             if (!ticket) {
                 return { valid: false, message: 'Ticket not found' };
             }
 
-            // Verify QR token
-            if (ticket.qr_token !== qrToken) {
-                await this.logVerification(client, ticket.id, ticketNumber, false, 'Invalid QR token');
-                return { valid: false, message: 'Invalid ticket' };
-            }
-
-            // Check status
             if (ticket.status !== 'active') {
-                await this.logVerification(client, ticket.id, ticketNumber, false, `Ticket is ${ticket.status}`);
                 return { valid: false, message: `Ticket is ${ticket.status}` };
             }
 
-            // Check expiry
             if (new Date(ticket.expires_at) < new Date()) {
                 await this.updateStatus(ticket.id, 'expired');
-                await this.logVerification(client, ticket.id, ticketNumber, false, 'Ticket expired');
                 return { valid: false, message: 'Ticket has expired' };
             }
 
-            // Check travel date
-            const travelDate = new Date(ticket.travel_date);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            const maxVerifyDate = new Date(travelDate);
-            maxVerifyDate.setDate(maxVerifyDate.getDate() + 1);
-
-            if (today > maxVerifyDate) {
-                await this.updateStatus(ticket.id, 'expired');
-                await this.logVerification(client, ticket.id, ticketNumber, false, 'Travel date passed');
-                return { valid: false, message: 'Travel date has passed' };
-            }
-
             // Mark as used
-            await client.query(`
+            await db.query(`
                 UPDATE tickets 
-                SET status = 'used', used_at = NOW(), 
-                    verification_count = verification_count + 1,
-                    last_verified_at = NOW()
+                SET status = 'used', used_at = NOW(), updated_at = NOW()
                 WHERE id = $1
             `, [ticket.id]);
-
-            await this.logVerification(client, ticket.id, ticketNumber, true, 'Verified successfully');
-
-            await client.query('COMMIT');
 
             return {
                 valid: true,
@@ -252,30 +347,12 @@ class Ticket {
                     ticket_number: ticket.ticket_number,
                     site_name: ticket.site_name,
                     site_location: ticket.site_location,
-                    user_name: ticket.full_name,
-                    travel_date: ticket.travel_date,
-                    travelers: ticket.travelers
+                    status: ticket.status
                 }
             };
         } catch (error) {
-            await client.query('ROLLBACK');
             console.error('Error verifying ticket:', error);
             throw error;
-        } finally {
-            client.release();
-        }
-    }
-
-    // Log verification attempt
-    static async logVerification(client, ticketId, ticketNumber, success, message) {
-        try {
-            await client.query(`
-                INSERT INTO ticket_verifications 
-                (ticket_id, ticket_number, verification_type, success, error_message)
-                VALUES ($1, $2, 'scan', $3, $4)
-            `, [ticketId, ticketNumber, success, message]);
-        } catch (error) {
-            console.error('Error logging verification:', error);
         }
     }
 
@@ -298,10 +375,7 @@ class Ticket {
 
     // Cancel ticket
     static async cancel(ticketNumber, userId, reason) {
-        const client = await db.connect();
         try {
-            await client.query('BEGIN');
-
             const ticket = await this.findByTicketNumber(ticketNumber);
             
             if (!ticket) {
@@ -316,30 +390,17 @@ class Ticket {
                 return { success: false, message: `Cannot cancel ticket with status: ${ticket.status}` };
             }
 
-            // Check if travel date is at least 24 hours away
-            const travelDate = new Date(ticket.travel_date);
-            const now = new Date();
-            const hoursDiff = (travelDate - now) / (1000 * 60 * 60);
-
-            if (hoursDiff < 24) {
-                return { success: false, message: 'Cannot cancel within 24 hours of travel' };
-            }
-
-            await client.query(`
+            await db.query(`
                 UPDATE tickets 
-                SET status = 'cancelled', cancelled_at = NOW(),
+                SET status = 'cancelled', cancelled_at = NOW(), updated_at = NOW(),
                     cancellation_reason = $1
                 WHERE id = $2
             `, [reason || null, ticket.id]);
 
-            await client.query('COMMIT');
             return { success: true, message: 'Ticket cancelled successfully' };
         } catch (error) {
-            await client.query('ROLLBACK');
             console.error('Error cancelling ticket:', error);
             throw error;
-        } finally {
-            client.release();
         }
     }
 

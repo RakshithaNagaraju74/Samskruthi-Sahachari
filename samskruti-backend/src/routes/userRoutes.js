@@ -174,24 +174,188 @@ router.get('/wishlist', authMiddleware, async (req, res) => {
 });
 
 // Add to wishlist
+// backend/src/routes/userRoutes.js
+
+// Add to wishlist
 router.post('/wishlist/:siteId', authMiddleware, async (req, res) => {
-    try {
-        const { siteId } = req.params;
-        
-        const result = await User.addToWishlist(req.user.id, siteId);
-        
-        res.json({
-            success: true,
-            message: 'Added to wishlist',
-            data: result
+  try {
+    const userId = req.user.id;
+    const siteId = parseInt(req.params.siteId);
+    
+    const result = await User.addToWishlist(userId, siteId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Added to wishlist',
+        data: result.data
+      });
+    } else {
+      if (result.code === 'SITE_NOT_FOUND') {
+        res.status(404).json({
+          success: false,
+          message: result.error,
+          code: result.code
         });
-    } catch (error) {
-        console.error('Error adding to wishlist:', error);
+      } else if (result.code === 'ALREADY_EXISTS') {
+        res.status(400).json({
+          success: false,
+          message: result.error,
+          code: result.code
+        });
+      } else {
         res.status(500).json({
-            success: false,
-            message: 'Error adding to wishlist'
+          success: false,
+          message: result.error
         });
+      }
     }
+  } catch (error) {
+    console.error('Error adding to wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Remove from wishlist
+router.delete('/wishlist/:siteId', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const siteId = parseInt(req.params.siteId);
+    
+    const result = await User.removeFromWishlist(userId, siteId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Removed from wishlist'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error removing from wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Get wishlist
+// routes/userRoutes.js - Update the wishlist endpoints
+
+// Get wishlist
+router.get('/wishlist', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const result = await User.getWishlist(userId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        data: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error getting wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// Check if site is in wishlist
+router.get('/wishlist/check/:siteId', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const siteId = parseInt(req.params.siteId);
+    
+    const result = await User.checkWishlist(userId, siteId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        inWishlist: result.inWishlist
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error checking wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+router.get('/users/:id/stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await db.query(`
+      SELECT 
+        COUNT(DISTINCT v.id) as "totalVisits",
+        COUNT(DISTINCT b.id) as "totalBookings",
+        COUNT(DISTINCT r.id) as "totalReviews"
+      FROM users u
+      LEFT JOIN visits v ON v.user_id = u.id
+      LEFT JOIN bookings b ON b.user_id = u.id
+      LEFT JOIN reviews r ON r.user_id = u.id
+      WHERE u.id = $1
+    `, [id]);
+
+    res.json({
+      success: true,
+      data: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false });
+  }
+});
+// Check if site is in wishlist
+router.get('/wishlist/check/:siteId', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const siteId = parseInt(req.params.siteId);
+    
+    const result = await User.checkWishlist(userId, siteId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        inWishlist: result.inWishlist
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error checking wishlist:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
 });
 
 // Remove from wishlist

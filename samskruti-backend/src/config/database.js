@@ -1,7 +1,6 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Log the connection attempt (without password)
 console.log('🔄 Attempting to connect to database...');
 console.log('📊 Database config:', {
   host: process.env.DB_HOST,
@@ -17,48 +16,81 @@ const poolConfig = {
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   port: process.env.DB_PORT || 5432,
-  max: 20,
+  max: 5, // Reduce max connections for testing
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000, // Increased to 10 seconds
+  connectionTimeoutMillis: 30000,
   ssl: {
-    rejectUnauthorized: false // Required for Render
+    rejectUnauthorized: false
   }
 };
 
 const pool = new Pool(poolConfig);
 
-// Test database connection with better error handling
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ Database connection error details:');
-    console.error('  - Code:', err.code);
-    console.error('  - Message:', err.message);
+// Test connection with timeout
+const testConnection = async () => {
+  const client = await pool.connect();
+  try {
+    // Test query to check schema
+    const tableCheck = await client.query(`
+      SELECT table_name, column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'users'
+      ORDER BY ordinal_position;
+    `);
     
-    if (err.code === 'ETIMEDOUT') {
-      console.error('  ⏰ Connection timed out. Check if:');
-      console.error('    1. Your database host is correct');
-      console.error('    2. Your IP is allowlisted in Render');
-      console.error('    3. The database is running');
-      console.error('    4. You have the correct password');
-    } else if (err.code === 'ECONNREFUSED') {
-      console.error('  🔌 Connection refused. Check if:');
-      console.error('    1. The database port is correct (5432)');
-      console.error('    2. The database is accessible');
-    } else if (err.code === '28P01') {
-      console.error('  🔑 Authentication failed. Check your username and password');
-    }
+    console.log('✅ Connected to database!');
+    console.log('📊 Users table schema:');
+    tableCheck.rows.forEach(col => {
+      console.log(`   - ${col.column_name}: ${col.data_type}`);
+    });
     
-    // Don't exit, let the server try to reconnect
-    console.log('⚠️ Server will continue running, but database features will not work');
-  } else {
-    console.log('✅ Successfully connected to database!');
-    console.log(`📊 Database: ${process.env.DB_NAME}`);
-    console.log(`🌍 Host: ${process.env.DB_HOST}`);
-    release();
+    return true;
+  } catch (err) {
+    console.error('❌ Error checking schema:', err.message);
+    return false;
+  } finally {
+    client.release();
   }
-});
+};
 
-// Add error handler for the pool
+// Attempt connection with retry
+const connectWithRetry = async (retries = 5, delay = 5000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const client = await pool.connect();
+      console.log(`✅ Database connection attempt ${i + 1} successful!`);
+      client.release();
+      
+      // Test the connection and check schema
+      await testConnection();
+      return true;
+    } catch (err) {
+      console.error(`❌ Database connection attempt ${i + 1}/${retries} failed:`, err.message);
+      
+      if (err.code === '28P01') {
+        console.error('🔑 Authentication failed - check username/password');
+      } else if (err.code === 'ECONNREFUSED') {
+        console.error('🔌 Connection refused - check if database is accessible');
+      } else if (err.code === 'ETIMEDOUT') {
+        console.error('⏰ Connection timeout - check network/firewall settings');
+      }
+      
+      if (i < retries - 1) {
+        console.log(`🔄 Retrying in ${delay/1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  console.error('❌ All database connection attempts failed');
+  console.log('⚠️ Server will continue running in limited mode');
+  return false;
+};
+
+// Start connection attempt
+connectWithRetry();
+
+// Handle pool errors
 pool.on('error', (err) => {
   console.error('Unexpected database pool error:', err);
 });

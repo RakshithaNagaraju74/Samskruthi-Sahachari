@@ -4,7 +4,8 @@ const db = require('../config/database');
 class Review {
     // Create a new review
     static async create(reviewData) {
-        const client = await db.connect();
+        // Get a client from the pool for transaction
+        const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
 
@@ -36,7 +37,7 @@ class Review {
 
             const result = await client.query(query, values);
 
-            // Update site rating (trigger will handle this, but we can also do it manually)
+            // Update site rating
             await client.query(`
                 UPDATE heritage_sites 
                 SET rating = (
@@ -69,7 +70,8 @@ class Review {
             const query = `
                 SELECT r.*, 
                        u.email as user_email,
-                       up.full_name, up.profile_image
+                       up.full_name, 
+                       up.profile_image
                 FROM reviews r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN user_profiles up ON u.id = up.user_id
@@ -127,7 +129,7 @@ class Review {
 
     // Delete review
     static async delete(id, userId) {
-        const client = await db.connect();
+        const client = await db.pool.connect();
         try {
             await client.query('BEGIN');
 

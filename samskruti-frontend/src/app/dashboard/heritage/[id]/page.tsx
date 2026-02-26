@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useUser } from "@/context/UserContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { heritageService, HeritageSite } from "@/services/heritageService";
+import { heritageService, HeritageSite, Review } from "@/services/heritageService";
 import { bookingService } from "@/services/bookingService";
 import { userService } from "@/services/userService";
+import { messageService } from "@/services/messageService";
 
 interface PageProps {
   params: Promise<{
@@ -26,27 +27,45 @@ const Icons = {
   Mail: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
   Users: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   Star: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>,
+  StarOutline: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.524c.969 0 1.371 1.24.588 1.81l-3.66 2.658a1 1 0 00-.364 1.118l1.398 4.305c.3.921-.755 1.688-1.54 1.118l-3.66-2.658a1 1 0 00-1.175 0l-3.66 2.658c-.784.57-1.838-.197-1.539-1.118l1.398-4.305a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h4.524a1 1 0 00.95-.69l1.519-4.674z" /></svg>,
   Heart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>,
   HeartFilled: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" /></svg>,
   Check: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
   Book: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>,
+  Info: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Write: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
 };
 
 export default function HeritageDetailPage({ params }: PageProps) {
   const { isDarkMode } = useTheme();
   const { user } = useUser();
   const router = useRouter();
+  
   const [site, setSite] = useState<HeritageSite | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(0);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  
   const [bookingData, setBookingData] = useState({
     travelDate: '',
     travelers: 1,
     specialRequests: ''
   });
+  
+  const [reviewData, setReviewData] = useState({
+    rating: 5,
+    title: '',
+    comment: '',
+    visitDate: ''
+  });
+  
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState('');
+  const [reviewSuccess, setReviewSuccess] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'highlights' | 'reviews'>('overview');
@@ -68,72 +87,174 @@ export default function HeritageDetailPage({ params }: PageProps) {
   }, [params, router]);
 
   // Fetch site data when siteId is available
-  useEffect(() => {
-    const fetchSite = async () => {
-      if (!siteId) return;
+  // In HeritageDetailPage.tsx, update the fetchSite useEffect
+
+// Fetch site data when siteId is available
+useEffect(() => {
+  const fetchSite = async () => {
+    if (!siteId) return;
+    
+    try {
+      setLoading(true);
+      const data = await heritageService.getSiteById(siteId);
+      console.log("SITE DATA:", data);
       
-      try {
-        setLoading(true);
-        const data = await heritageService.getSiteById(siteId);
+      if (data) {
+        setSite(data);
         
-        if (data) {
-          setSite(data);
-          
-          // Check if site is in wishlist
-          if (user) {
-            // You can implement wishlist check here
-          }
-        } else {
-          console.error('Site not found');
-          router.push('/dashboard');
+        // Check if site is in wishlist using the new helper method
+        if (user) {
+          const isInWishlist = await userService.checkWishlist(siteId);
+          setIsWishlisted(isInWishlist);
         }
+      } else {
+        console.error('Site not found');
+        router.push('/dashboard');
+      }
+    } catch (error) {
+      console.error('Error fetching site:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchSite();
+}, [siteId, router, user]);
+
+  // Fetch reviews when site is loaded or tab changes
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!siteId || activeTab !== 'reviews') return;
+      
+      setReviewsLoading(true);
+      try {
+        const data = await heritageService.getReviews(siteId);
+        setReviews(data);
       } catch (error) {
-        console.error('Error fetching site:', error);
+        console.error('Error fetching reviews:', error);
       } finally {
-        setLoading(false);
+        setReviewsLoading(false);
       }
     };
 
-    fetchSite();
-  }, [siteId, router, user]);
+    fetchReviews();
+  }, [siteId, activeTab]);
 
   const handleBookNow = async () => {
+  if (!user) {
+    router.push('/auth');
+    return;
+  }
+
+  if (!bookingData.travelDate) {
+    setBookingError('Please select a travel date');
+    return;
+  }
+
+  if (!site) {
+    setBookingError('Site data not loaded');
+    return;
+  }
+
+  setIsSubmitting(true);
+  setBookingError('');
+
+  try {
+    const formattedDate = new Date(bookingData.travelDate)
+      .toISOString()
+      .split('T')[0];
+
+    const travelers = Number(bookingData.travelers);
+    const entryFee = Number(site.entry_fee_indian);
+
+    if (!entryFee || entryFee <= 0) {
+      setBookingError('Invalid entry fee');
+      return;
+    }
+
+    const totalAmount = entryFee * travelers;
+
+    const bookingPayload = {
+      user_id: Number(user.id),
+      site_id: Number(site.id),
+      enterprise_id: site.enterprise_id ?? null,
+      travel_date: formattedDate,
+      travelers: travelers,
+      total_amount: totalAmount,
+      special_requests: bookingData.specialRequests || null,
+    };
+
+    console.log("FINAL PAYLOAD:", bookingPayload);
+
+    const result = await bookingService.createBooking(bookingPayload);
+
+    if (result.success && result.booking) {
+      setBookingSuccess(true);
+      setTimeout(() => {
+        setShowBookingModal(false);
+        setBookingSuccess(false);
+        setBookingData({ travelDate: '', travelers: 1, specialRequests: '' });
+        router.push('/dashboard/tickets');
+      }, 3000);
+    } else {
+      setBookingError(result.error || 'Booking failed');
+    }
+
+  } catch (error: any) {
+    console.error('Booking error:', error);
+
+    if (error.response) {
+      console.error('Backend error:', error.response.data);
+      setBookingError(
+        error.response.data?.message ||
+        `Error ${error.response.status}: Booking failed`
+      );
+    } else {
+      setBookingError('An error occurred. Please try again.');
+    }
+
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  const handleSubmitReview = async () => {
     if (!user) {
       router.push('/auth');
       return;
     }
 
-    if (!bookingData.travelDate) {
-      setBookingError('Please select a travel date');
+    if (!reviewData.comment) {
+      setReviewError('Please write a review comment');
       return;
     }
 
     setIsSubmitting(true);
-    setBookingError('');
+    setReviewError('');
 
     try {
-      const result = await bookingService.createBooking({
-        user_id: user.id,
-        site_id: site!.id,
-        travel_date: bookingData.travelDate,
-        travelers: bookingData.travelers,
-        total_amount: (site!.entry_fee_indian || 0) * bookingData.travelers,
-        special_requests: bookingData.specialRequests
+      const success = await heritageService.addReview(site!.id, {
+        rating: reviewData.rating,
+        title: reviewData.title || undefined,
+        comment: reviewData.comment,
+        visit_date: reviewData.visitDate || undefined
       });
 
-      if (result.success && result.booking) {
-        setBookingSuccess(true);
+      if (success) {
+        setReviewSuccess(true);
         setTimeout(() => {
-          setShowBookingModal(false);
-          setBookingSuccess(false);
-          setBookingData({ travelDate: '', travelers: 1, specialRequests: '' });
-          router.push('/dashboard/tickets');
-        }, 3000);
+          setShowReviewModal(false);
+          setReviewSuccess(false);
+          setReviewData({ rating: 5, title: '', comment: '', visitDate: '' });
+          // Refresh reviews
+          heritageService.getReviews(site!.id).then(setReviews);
+        }, 2000);
       } else {
-        setBookingError(result.error || 'Booking failed');
+        setReviewError('Failed to submit review');
       }
     } catch (error) {
-      setBookingError('An error occurred. Please try again.');
+      console.error('Review error:', error);
+      setReviewError('An error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -152,6 +273,43 @@ export default function HeritageDetailPage({ params }: PageProps) {
       const added = await userService.addToWishlist(site!.id);
       if (added) setIsWishlisted(true);
     }
+  };
+
+  const formatTime = (time?: string) => {
+    if (!time) return 'N/A';
+    try {
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return `${hour12}:${minutes} ${ampm}`;
+    } catch {
+      return time;
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const renderStars = (rating: number) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      if (i <= rating) {
+        stars.push(<Icons.Star key={i} />);
+      } else {
+        stars.push(<Icons.StarOutline key={i} />);
+      }
+    }
+    return stars;
   };
 
   if (loading) {
@@ -243,11 +401,11 @@ export default function HeritageDetailPage({ params }: PageProps) {
                     UNESCO World Heritage
                   </div>
                 )}
-                {site.rating && site.rating > 0 && (
+                {site.rating !== undefined && site.rating !== null && Number(site.rating) > 0 && (
                   <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
                     <span>⭐</span>
-                    <span>{site.rating.toFixed(1)}</span>
-                    {site.total_reviews && <span>({site.total_reviews})</span>}
+                    <span>{typeof site.rating === 'number' ? site.rating.toFixed(1) : Number(site.rating).toFixed(1)}</span>
+                    {site.total_reviews ? <span>({site.total_reviews})</span> : null}
                   </div>
                 )}
               </div>
@@ -280,21 +438,43 @@ export default function HeritageDetailPage({ params }: PageProps) {
             {/* Site Info */}
             <div>
               <h1 className="text-4xl font-light mb-2">{site.name}</h1>
-              <div className="flex items-center gap-2 mb-4">
+              
+              {/* Location */}
+              <div className="flex items-center gap-2 mb-2">
                 <Icons.Location />
-                <span>{site.location}{site.district ? `, ${site.district} District` : ''}</span>
+                <span>
+                  {site.location}
+                  {site.district ? `, ${site.district} District` : ''}
+                  {site.state ? `, ${site.state}` : ''}
+                </span>
               </div>
 
-              <div className="flex items-center gap-4 mb-6">
+              {/* Quick Info Row */}
+              <div className="flex flex-wrap items-center gap-4 mb-4">
                 <span className="text-emerald-500 font-bold text-2xl">
                   {site.display_price || `₹${site.entry_fee_indian || 0}`}
                 </span>
+                
+                {site.opening_time && site.closing_time && (
+                  <span className={`flex items-center gap-1 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <Icons.Clock />
+                    {formatTime(site.opening_time)} - {formatTime(site.closing_time)}
+                  </span>
+                )}
+                
                 {site.duration_required && (
                   <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     • {site.duration_required}
                   </span>
                 )}
               </div>
+
+              {/* Significance */}
+              {site.significance && (
+                <div className={`mb-4 p-3 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                  <p className="text-sm italic">"{site.significance}"</p>
+                </div>
+              )}
 
               {/* Tabs */}
               <div className="flex gap-4 mb-6 border-b border-gray-200 dark:border-gray-700">
@@ -355,6 +535,15 @@ export default function HeritageDetailPage({ params }: PageProps) {
                           </div>
                         )}
                       </div>
+
+                      {/* Additional Info */}
+                      {site.site_type && (
+                        <div className="mt-4">
+                          <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            Type: {site.site_type} {site.subcategory ? `• ${site.subcategory}` : ''}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                   
@@ -370,9 +559,67 @@ export default function HeritageDetailPage({ params }: PageProps) {
                   )}
                   
                   {activeTab === 'reviews' && (
-                    <p className={`text-center py-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Reviews coming soon...
-                    </p>
+                    <div>
+                      {user && (
+                        <button
+                          onClick={() => setShowReviewModal(true)}
+                          className="mb-4 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center gap-2"
+                        >
+                          <Icons.Write />
+                          Write a Review
+                        </button>
+                      )}
+                      
+                      {reviewsLoading ? (
+                        <div className="flex justify-center py-8">
+                          <div className="w-8 h-8 border-2 border-emerald-200 border-t-emerald-500 rounded-full animate-spin"></div>
+                        </div>
+                      ) : reviews.length > 0 ? (
+                        <div className="space-y-4">
+                          {reviews.map((review) => (
+                            <div
+                              key={review.id}
+                              className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                                    <span className="text-sm font-medium">
+                                      {review.user_name?.charAt(0) || 'U'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{review.user_name}</p>
+                                    <p className="text-xs opacity-60">{formatDate(review.created_at)}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {renderStars(review.rating)}
+                                </div>
+                              </div>
+                              {review.title && (
+                                <h4 className="text-sm font-medium mb-1">{review.title}</h4>
+                              )}
+                              <p className="text-sm">{review.comment}</p>
+                              {review.visit_date && (
+                                <p className="text-xs opacity-60 mt-2">
+                                  Visited: {formatDate(review.visit_date)}
+                                </p>
+                              )}
+                              {review.helpful_count > 0 && (
+                                <p className="text-xs text-emerald-500 mt-2">
+                                  {review.helpful_count} found this helpful
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className={`text-center py-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          No reviews yet. Be the first to review!
+                        </p>
+                      )}
+                    </div>
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -388,40 +635,9 @@ export default function HeritageDetailPage({ params }: PageProps) {
           </div>
 
           {/* Enterprise Info */}
-          {site.enterprise && (
-            <div className={`mb-8 p-6 rounded-xl ${
-              isDarkMode ? "bg-gray-800" : "bg-white shadow-lg"
-            }`}>
-              <h2 className="text-xl font-medium mb-4">Organized by</h2>
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-2xl">
-                  {site.enterprise.company_name?.charAt(0) || 'E'}
-                </div>
-                <div>
-                  <h3 className="font-bold">{site.enterprise.company_name}</h3>
-                  {site.enterprise.verified && (
-                    <p className="text-sm text-emerald-500 flex items-center gap-1 mt-1">
-                      <span>✓</span> Verified Partner
-                    </p>
-                  )}
-                  {(site.enterprise.contact_phone || site.enterprise.contact_email) && (
-                    <div className="mt-2 space-y-1">
-                      {site.enterprise.contact_phone && (
-                        <p className="text-sm flex items-center gap-2">
-                          <Icons.Phone /> {site.enterprise.contact_phone}
-                        </p>
-                      )}
-                      {site.enterprise.contact_email && (
-                        <p className="text-sm flex items-center gap-2">
-                          <Icons.Mail /> {site.enterprise.contact_email}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Enterprise Info */}
+          {/* Enterprise Info */}
+
 
           {/* Contact Info */}
           {(site.contact_phone || site.contact_email || site.website) && (
@@ -594,6 +810,140 @@ export default function HeritageDetailPage({ params }: PageProps) {
                         className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                       >
                         {isSubmitting ? 'Processing...' : 'Confirm Booking'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Review Modal */}
+      <AnimatePresence>
+        {showReviewModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowReviewModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`max-w-md w-full rounded-xl ${
+                isDarkMode ? "bg-gray-900" : "bg-white"
+              } p-6 shadow-xl`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {reviewSuccess ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Icons.Check />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Thank You!</h3>
+                  <p className="mb-4">Your review has been submitted successfully.</p>
+                  <button
+                    onClick={() => setShowReviewModal(false)}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold mb-4">Write a Review</h2>
+                  <p className="mb-6">{site.name}</p>
+
+                  <div className="space-y-4">
+                    {/* Rating */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Rating</label>
+                      <div className="flex gap-2">
+                        {[1,2,3,4,5].map((star) => (
+                          <button
+                            key={star}
+                            onClick={() => setReviewData({...reviewData, rating: star})}
+                            className={`text-2xl ${
+                              star <= reviewData.rating 
+                                ? 'text-yellow-400' 
+                                : isDarkMode ? 'text-gray-600' : 'text-gray-300'
+                            }`}
+                          >
+                            ★
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Review Title (Optional)</label>
+                      <input
+                        type="text"
+                        value={reviewData.title}
+                        onChange={(e) => setReviewData({...reviewData, title: e.target.value})}
+                        className={`w-full px-4 py-2 rounded-lg border ${
+                          isDarkMode 
+                            ? "bg-gray-800 border-gray-700" 
+                            : "bg-white border-gray-300"
+                        } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                        placeholder="Summarize your experience"
+                      />
+                    </div>
+
+                    {/* Comment */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Review</label>
+                      <textarea
+                        value={reviewData.comment}
+                        onChange={(e) => setReviewData({...reviewData, comment: e.target.value})}
+                        rows={4}
+                        className={`w-full px-4 py-2 rounded-lg border ${
+                          isDarkMode 
+                            ? "bg-gray-800 border-gray-700" 
+                            : "bg-white border-gray-300"
+                        } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                        placeholder="Share your experience..."
+                      />
+                    </div>
+
+                    {/* Visit Date */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Date of Visit (Optional)</label>
+                      <input
+                        type="date"
+                        max={new Date().toISOString().split('T')[0]}
+                        value={reviewData.visitDate}
+                        onChange={(e) => setReviewData({...reviewData, visitDate: e.target.value})}
+                        className={`w-full px-4 py-2 rounded-lg border ${
+                          isDarkMode 
+                            ? "bg-gray-800 border-gray-700" 
+                            : "bg-white border-gray-300"
+                        } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                      />
+                    </div>
+
+                    {reviewError && (
+                      <p className="text-red-500 text-sm">{reviewError}</p>
+                    )}
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={() => setShowReviewModal(false)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSubmitReview}
+                        disabled={isSubmitting}
+                        className="flex-1 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Submitting...' : 'Submit Review'}
                       </button>
                     </div>
                   </div>

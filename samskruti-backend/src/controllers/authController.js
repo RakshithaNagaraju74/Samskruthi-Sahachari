@@ -1,37 +1,23 @@
-// controllers/authController.js
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const db = require('../config/database');
 const User = require('../models/User');
 const UserProfile = require('../models/UserProfile');
 const Enterprise = require('../models/Enterprise');
-const SellerProfile = require('../models/SellerProfile');
-const { generateToken, generateRefreshToken, verifyToken } = require('../utils/generateToken');
-const { validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs');
+const Seller = require('../models/Seller');
 
 class AuthController {
   // Register new user
-  static async register(req, res) {
+  async register(req, res) {
+    const client = await db.pool.connect();
+    
     try {
-      console.log('Registration request body:', req.body);
+      await client.query('BEGIN');
       
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          errors: errors.array()
-        });
-      }
-
-      const { email, password, user_type, ...profileData } = req.body;
-
-      // Validate required fields
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email and password are required'
-        });
-      }
-
+      const { email, password, userType } = req.body;
+      
+      console.log('Registration attempt for:', email, 'type:', userType);
+      
       // Check if user already exists
       const existingUser = await User.findByEmail(email);
       if (existingUser) {
@@ -40,132 +26,231 @@ class AuthController {
           message: 'User with this email already exists'
         });
       }
-
+      
       // Hash password
       const salt = await bcrypt.genSalt(10);
-      const password_hash = await bcrypt.hash(password, salt);
-
-      // Create user with hashed password
-      const user = await User.create({
-        email,
-        password_hash,
-        role: user_type || 'user'
-      });
-
-      console.log('User created:', user);
-
+      const hashedPassword = await bcrypt.hash(password, salt);
+      
+      // Create user - setting BOTH role and user_type for consistency
+      const userResult = await client.query(
+        `INSERT INTO users (email, password_hash, role, user_type, is_active, is_verified, created_at, updated_at)
+         VALUES ($1, $2, $3, $3, $4, $5, NOW(), NOW())
+         RETURNING id, email, role, user_type, is_active, is_verified, created_at`,
+        [email, hashedPassword, userType, true, userType === 'user' ? true : false]
+      );
+      
+      const user = userResult.rows[0];
+      console.log('User created:', user.id, 'with role:', user.role, 'and user_type:', user.user_type);
+      
       // Create profile based on user type
-      let profile;
-      switch(user_type) {
-        case 'enterprise':
-          profile = await Enterprise.create({
-            user_id: user.id,
-            company_name: profileData.company_name,
-            registration_number: profileData.registration_number,
-            gst_number: profileData.gst_number,
-            contact_person: profileData.contact_person,
-            contact_email: profileData.contact_email,
-            contact_phone: profileData.contact_phone,
-            address: profileData.address,
-            city: profileData.city,
-            state: profileData.state,
-            pincode: profileData.pincode,
-            website: profileData.website,
-            description: profileData.description,
-            logo_url: profileData.logo_url
-          });
-          break;
-        case 'seller':
-          profile = await SellerProfile.create({
-            user_id: user.id,
-            shop_name: profileData.shop_name,
-            owner_name: profileData.owner_name,
-            shop_type: profileData.shop_type,
-            gst_number: profileData.gst_number,
-            pan_number: profileData.pan_number,
-            phone: profileData.phone,
-            alternate_phone: profileData.alternate_phone,
-            email: profileData.email,
-            website: profileData.website,
-            shop_address: profileData.shop_address,
-            city: profileData.city,
-            state: profileData.state,
-            pincode: profileData.pincode,
-            established_year: profileData.established_year,
-            business_description: profileData.business_description,
-            product_categories: profileData.product_categories,
-            shop_images: profileData.shop_images,
-            documents: profileData.documents
-          });
-          break;
-        default: // 'user' or any other type
-          profile = await UserProfile.create({
-            user_id: user.id,
-            full_name: profileData.full_name,
-            phone: profileData.phone,
-            date_of_birth: profileData.date_of_birth,
-            gender: profileData.gender,
-            profile_image: profileData.profile_image,
-            city: profileData.city,
-            state: profileData.state,
-            country: profileData.country,
-            preferred_language: profileData.preferred_language,
-            interests: profileData.interests
-          });
+      if (userType === 'user') {
+        // Create user profile
+        const { name, phone, dateOfBirth, gender, city, state } = req.body;
+        
+        await client.query(
+          `INSERT INTO user_profiles 
+           (user_id, full_name, phone, date_of_birth, gender, city, state, country, preferred_language, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
+          [user.id, name || '', phone || '', dateOfBirth || null, gender || null, city || null, state || null, 'India', 'English']
+        );
+        
+      } else if (userType === 'enterprise') {
+        // Create enterprise profile
+        const {
+          companyName,
+          ownerName,
+          businessType,
+          companyDescription,
+          contactPhone,
+          companyWebsite,
+          registrationNumber, gstNumber, panNumber,
+          establishedYear, employeeCount,
+          contactPerson, companyAddress, companyCity,
+          companyState, companyPincode
+        } = req.body;
+        
+        console.log('Creating enterprise with data:', {
+          enterprise_name: companyName,
+          owner_name: ownerName,
+          business_type: businessType
+        });
+        
+        // Handle document uploads
+        const verification_documents = {};
+        const business_documents = {};
+        const tax_documents = {};
+        const bank_details = {};
+        
+        if (req.files) {
+          if (req.files.registrationCert) {
+            business_documents.registrationCert = req.files.registrationCert[0].path;
+          }
+          if (req.files.gstCert) {
+            tax_documents.gstCert = req.files.gstCert[0].path;
+          }
+          if (req.files.panCard) {
+            tax_documents.panCard = req.files.panCard[0].path;
+          }
+          if (req.files.addressProof) {
+            verification_documents.addressProof = req.files.addressProof[0].path;
+          }
+          if (req.files.bankStatement) {
+            bank_details.bankStatement = req.files.bankStatement[0].path;
+          }
+        }
+        
+        // Build address/location
+        const location = [companyAddress, companyCity, companyState, companyPincode]
+          .filter(Boolean)
+          .join(', ');
+        
+        await client.query(
+          `INSERT INTO enterprises 
+           (user_id, enterprise_name, owner_name, business_type, description, location,
+            phone, website, verification_status, verification_documents, business_documents,
+            tax_documents, bank_details, submitted_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), NOW())
+           RETURNING id`,
+          [user.id, 
+           companyName || '', 
+           ownerName || contactPerson || '', 
+           businessType || '', 
+           companyDescription || '', 
+           location || '',
+           contactPhone || '', 
+           companyWebsite || '', 
+           'pending',
+           JSON.stringify(verification_documents),
+           JSON.stringify(business_documents),
+           JSON.stringify(tax_documents),
+           JSON.stringify(bank_details)
+          ]
+        );
+        
+        console.log('Enterprise profile created for user:', user.id);
+        
+      } else if (userType === 'seller') {
+        // Create seller profile
+        const {
+          shopName, ownerName, shopType, sellerPhone, sellerAlternatePhone,
+          shopAddress, sellerCity, sellerState, sellerPincode, establishedYear,
+          businessDescription, productCategories, gstNumber, panNumber,
+          bankAccountNumber, bankIfscCode, bankName
+        } = req.body;
+        
+        console.log('Creating seller with data:', {
+          shop_name: shopName,
+          owner_name: ownerName
+        });
+        
+        // Parse product categories
+        let categories = [];
+        if (productCategories) {
+          try {
+            categories = typeof productCategories === 'string' 
+              ? JSON.parse(productCategories) 
+              : (Array.isArray(productCategories) ? productCategories : []);
+          } catch (e) {
+            categories = [];
+          }
+        }
+        
+        // Build address
+        const address = [shopAddress, sellerCity, sellerState, sellerPincode]
+          .filter(Boolean)
+          .join(', ');
+        
+        // Prepare verification documents
+        const verification_documents = {};
+        if (req.files) {
+          if (req.files.identityProof) {
+            verification_documents.identityProof = req.files.identityProof[0].path;
+          }
+          if (req.files.addressProof) {
+            verification_documents.addressProof = req.files.addressProof[0].path;
+          }
+        }
+        
+        // Prepare bank details
+        const bank_details = {
+          account_number: bankAccountNumber,
+          ifsc_code: bankIfscCode,
+          bank_name: bankName
+        };
+        
+        await client.query(
+          `INSERT INTO sellers 
+           (user_id, shop_name, owner_name, shop_type, phone, alternate_phone,
+            shop_address, business_description, product_categories, gst_number, pan_number,
+            bank_details, verification_status, verification_documents, submitted_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW(), NOW())
+           RETURNING id`,
+          [user.id, 
+           shopName || '', 
+           ownerName || '', 
+           shopType || '', 
+           sellerPhone || '', 
+           sellerAlternatePhone || '',
+           address || '', 
+           businessDescription || '', 
+           categories, 
+           gstNumber || '', 
+           panNumber || '',
+           JSON.stringify(bank_details),
+           'pending',
+           JSON.stringify(verification_documents)
+          ]
+        );
+        
+        console.log('Seller profile created for user:', user.id);
       }
-
-      // Generate token
-      const token = generateToken(user);
-      const refreshToken = generateRefreshToken(user);
-
+      
+      await client.query('COMMIT');
+      
+      // Generate JWT token with BOTH role and user_type
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          email: user.email, 
+          role: user.role,
+          user_type: user.user_type || user.role
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+      
+      // Return success
       res.status(201).json({
         success: true,
-        message: 'Registration successful',
+        message: userType === 'user' 
+          ? 'User registered successfully' 
+          : 'Registration submitted for approval',
         data: {
-          user: {
-            id: user.id,
-            email: user.email,
-            user_type: user.role
-          },
-          profile,
-          token,
-          refreshToken
+          user,
+          token
         }
       });
+      
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Registration error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error during registration',
+        message: 'Registration failed',
         error: error.message
       });
+    } finally {
+      client.release();
     }
   }
-
-  // Login user
-  static async login(req, res) {
+  
+  // Login user - FIXED VERSION
+  async login(req, res) {
     try {
-      console.log('Login request body:', req.body);
-      
-      // Check for validation errors
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          errors: errors.array()
-        });
-      }
-
       const { email, password, rememberMe } = req.body;
-
-      // Validate required fields
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email and password are required'
-        });
-      }
-
+      
+      console.log('Login attempt for:', email);
+      
       // Find user
       const user = await User.findByEmail(email);
       if (!user) {
@@ -174,208 +259,261 @@ class AuthController {
           message: 'Invalid email or password'
         });
       }
-
-      console.log('User found:', { id: user.id, email: user.email, role: user.role });
-
-      // Check if user is active
-      if (!user.is_active) {
-        return res.status(401).json({
-          success: false,
-          message: 'Account is deactivated. Please contact support.'
-        });
-      }
-
-      // Verify password
-      const isValidPassword = await User.verifyPassword(user, password);
+      
+      // Check password
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
           message: 'Invalid email or password'
         });
       }
-
-      // Update last login
-      await User.updateLastLogin(user.id);
-
-      // Get profile based on user type
+      
+      // Check if user is active
+      if (!user.is_active) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is deactivated. Please contact support.'
+        });
+      }
+      
+      // Determine the actual user type/role (check both fields)
+      const actualUserType = user.role || user.user_type || 'user';
+      console.log('User type from DB - role:', user.role, 'user_type:', user.user_type, 'using:', actualUserType);
+      
+      // Check verification status for enterprise/seller and determine redirect path
+      let redirectTo = null;
+      let profileComplete = false;
       let profile = null;
-      try {
-        switch(user.role) {
-          case 'enterprise':
-            profile = await Enterprise.findByUserId(user.id);
-            break;
-          case 'seller':
-            profile = await SellerProfile.findByUserId(user.id);
-            break;
-          default:
-            profile = await UserProfile.findByUserId(user.id);
-        }
-      } catch (profileError) {
-        console.error('Error fetching profile:', profileError);
-        // Continue without profile if not found
-      }
-
-      // Generate tokens
-      const token = generateToken(user);
-      const refreshToken = generateRefreshToken(user);
-
-      // Create session if remember me is checked
-      if (rememberMe) {
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
-
-        // Format device info as an object
-        const deviceInfo = {
-          userAgent: req.headers['user-agent'],
-          platform: req.headers['sec-ch-ua-platform'] || 'unknown',
-          mobile: req.headers['sec-ch-ua-mobile'] || '?0',
-          acceptLanguage: req.headers['accept-language'],
-          timestamp: new Date().toISOString()
-        };
-
-        await User.createSession(
-          user.id,
-          refreshToken,
-          deviceInfo,
-          req.ip || req.connection.remoteAddress,
-          expiresAt
+      
+      if (actualUserType === 'enterprise') {
+        const enterpriseQuery = await db.query(
+          'SELECT * FROM enterprises WHERE user_id = $1',
+          [user.id]
         );
+        profile = enterpriseQuery.rows[0];
+        
+        if (profile) {
+          if (profile.verification_status === 'approved') {
+            redirectTo = '/enterprise/dashboard';
+            profileComplete = true;
+            console.log('Enterprise approved, redirecting to:', redirectTo);
+          } else {
+            console.log('Enterprise not approved, status:', profile.verification_status);
+            return res.status(403).json({
+              success: false,
+              message: `Your enterprise account is ${profile.verification_status}. Please wait for approval.`,
+              redirectTo: '/auth/pending-approval'
+            });
+          }
+        } else {
+          // No profile found, treat as pending
+          return res.status(403).json({
+            success: false,
+            message: 'Your enterprise profile is not complete. Please contact support.',
+            redirectTo: '/auth/pending-approval'
+          });
+        }
+      } else if (actualUserType === 'seller') {
+        const sellerQuery = await db.query(
+          'SELECT * FROM sellers WHERE user_id = $1',
+          [user.id]
+        );
+        profile = sellerQuery.rows[0];
+        
+        if (profile) {
+          if (profile.verification_status === 'approved') {
+            redirectTo = '/seller/dashboard';
+            profileComplete = true;
+            console.log('Seller approved, redirecting to:', redirectTo);
+          } else {
+            console.log('Seller not approved, status:', profile.verification_status);
+            return res.status(403).json({
+              success: false,
+              message: `Your seller account is ${profile.verification_status}. Please wait for approval.`,
+              redirectTo: '/auth/pending-approval'
+            });
+          }
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: 'Your seller profile is not complete. Please contact support.',
+            redirectTo: '/auth/pending-approval'
+          });
+        }
+      } else if (actualUserType === 'admin') {
+        redirectTo = '/admin/dashboard';
+        profileComplete = true;
+        console.log('Admin login, redirecting to:', redirectTo);
+      } else {
+        // Regular user
+        redirectTo = '/dashboard';
+        profileComplete = true;
+        console.log('Regular user, redirecting to:', redirectTo);
       }
-
+      
+      // Update last login
+      try {
+        await User.updateLastLogin(user.id);
+      } catch (loginError) {
+        console.log('Note: Could not update last login');
+      }
+      
+      // Generate token with BOTH role and user_type
+      const tokenExpiry = rememberMe ? '30d' : (process.env.JWT_EXPIRES_IN || '7d');
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          email: user.email, 
+          role: actualUserType,
+          user_type: actualUserType
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: tokenExpiry }
+      );
+      
+      // Create user object for response
+      const userResponse = {
+        id: user.id,
+        email: user.email,
+        role: actualUserType,
+        user_type: actualUserType,
+        is_active: user.is_active,
+        is_verified: user.is_verified,
+        last_login: user.last_login,
+        created_at: user.created_at
+      };
+      
+      console.log('Login successful for:', email, 'role:', actualUserType, 'redirecting to:', redirectTo);
+      
       res.json({
         success: true,
         message: 'Login successful',
         data: {
-          user: {
-            id: user.id,
-            email: user.email,
-            user_type: user.role,
-            email_verified: user.is_verified
-          },
-          profile,
+          user: userResponse,
           token,
-          refreshToken: rememberMe ? refreshToken : undefined
+          profile,
+          redirectTo,
+          profileComplete
         }
       });
+      
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error during login',
+        message: 'Login failed',
         error: error.message
       });
     }
   }
-
+  
   // Refresh token
-  static async refreshToken(req, res) {
+  async refreshToken(req, res) {
     try {
       const { refreshToken } = req.body;
-
+      
       if (!refreshToken) {
         return res.status(400).json({
           success: false,
           message: 'Refresh token is required'
         });
       }
-
+      
       // Verify refresh token
-      const decoded = verifyToken(refreshToken);
-      if (!decoded) {
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || 'your-refresh-secret');
+      
+      // Find user
+      const user = await User.findById(decoded.id);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Check if user is active
+      if (!user.is_active) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is deactivated'
+        });
+      }
+      
+      // Determine actual user type
+      const actualUserType = user.role || user.user_type || 'user';
+      
+      // Generate new access token
+      const newToken = jwt.sign(
+        { 
+          id: user.id, 
+          email: user.email, 
+          role: actualUserType,
+          user_type: actualUserType
+        },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+      
+      res.json({
+        success: true,
+        data: {
+          token: newToken
+        }
+      });
+      
+    } catch (error) {
+      console.error('Refresh token error:', error);
+      
+      if (error.name === 'JsonWebTokenError') {
         return res.status(401).json({
           success: false,
           message: 'Invalid refresh token'
         });
       }
-
-      // Check if session exists
-      const session = await User.findSession(refreshToken);
-      if (!session) {
+      
+      if (error.name === 'TokenExpiredError') {
         return res.status(401).json({
           success: false,
-          message: 'Session expired or invalid'
+          message: 'Refresh token expired'
         });
       }
-
-      // Get user
-      const user = await User.findById(decoded.id);
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-
-      // Generate new tokens
-      const newToken = generateToken(user);
-      const newRefreshToken = generateRefreshToken(user);
-
-      // Delete old session and create new one
-      await User.deleteSession(refreshToken);
       
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-      
-      const deviceInfo = {
-        userAgent: req.headers['user-agent'],
-        platform: req.headers['sec-ch-ua-platform'] || 'unknown',
-        mobile: req.headers['sec-ch-ua-mobile'] || '?0',
-        timestamp: new Date().toISOString()
-      };
-      
-      await User.createSession(
-        user.id,
-        newRefreshToken,
-        deviceInfo,
-        req.ip || req.connection.remoteAddress,
-        expiresAt
-      );
-
-      res.json({
-        success: true,
-        data: {
-          token: newToken,
-          refreshToken: newRefreshToken
-        }
-      });
-    } catch (error) {
-      console.error('Refresh token error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error refreshing token',
+        message: 'Failed to refresh token',
         error: error.message
       });
     }
   }
-
+  
   // Logout
-  static async logout(req, res) {
+  async logout(req, res) {
     try {
-      const { refreshToken } = req.body;
-
-      if (refreshToken) {
-        await User.deleteSession(refreshToken);
+      const token = req.headers.authorization?.split(' ')[1];
+      
+      if (token) {
+        // Optional: Blacklist the token
       }
-
+      
       res.json({
         success: true,
-        message: 'Logout successful'
+        message: 'Logged out successfully'
       });
+      
     } catch (error) {
       console.error('Logout error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error during logout',
+        message: 'Logout failed',
         error: error.message
       });
     }
   }
-
+  
   // Get current user
-  static async getCurrentUser(req, res) {
+  async getCurrentUser(req, res) {
     try {
-      console.log('Getting current user for ID:', req.user.id);
-      
       const user = await User.findById(req.user.id);
       
       if (!user) {
@@ -384,43 +522,62 @@ class AuthController {
           message: 'User not found'
         });
       }
-
+      
+      // Determine actual user type
+      const actualUserType = user.role || user.user_type || 'user';
+      
       // Get profile based on user type
       let profile = null;
-      try {
-        switch(user.role) {
-          case 'enterprise':
-            profile = await Enterprise.findByUserId(user.id);
-            break;
-          case 'seller':
-            profile = await SellerProfile.findByUserId(user.id);
-            break;
-          default:
-            profile = await UserProfile.findByUserId(user.id);
-        }
-      } catch (profileError) {
-        console.error('Error fetching profile:', profileError);
-        // Continue without profile if not found
+      if (actualUserType === 'enterprise') {
+        const profileQuery = await db.query(
+          'SELECT * FROM enterprises WHERE user_id = $1',
+          [user.id]
+        );
+        profile = profileQuery.rows[0];
+      } else if (actualUserType === 'seller') {
+        const profileQuery = await db.query(
+          'SELECT * FROM sellers WHERE user_id = $1',
+          [user.id]
+        );
+        profile = profileQuery.rows[0];
+      } else {
+        const profileQuery = await db.query(
+          'SELECT * FROM user_profiles WHERE user_id = $1',
+          [user.id]
+        );
+        profile = profileQuery.rows[0];
       }
-
-      console.log('Returning user data:', { user, profile });
-
+      
+      // Create user response
+      const userResponse = {
+        id: user.id,
+        email: user.email,
+        role: actualUserType,
+        user_type: actualUserType,
+        is_active: user.is_active,
+        is_verified: user.is_verified,
+        last_login: user.last_login,
+        created_at: user.created_at
+      };
+      
       res.json({
         success: true,
         data: {
-          user,
-          profile: profile || null
+          user: userResponse,
+          profile
         }
       });
+      
     } catch (error) {
       console.error('Get current user error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error fetching user',
+        message: 'Failed to get user data',
         error: error.message
       });
     }
   }
 }
 
-module.exports = AuthController;
+// Export an instance of the class
+module.exports = new AuthController();

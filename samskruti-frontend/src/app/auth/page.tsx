@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -27,10 +28,18 @@ export default function AuthPage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [userType, setUserType] = useState<"user" | "enterprise" | "seller">("user");
   
+  // Registration step for enterprise/seller
+  const [regStep, setRegStep] = useState(1);
+  
   // Enterprise specific fields
   const [companyName, setCompanyName] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [gstNumber, setGstNumber] = useState("");
+  const [panNumber, setPanNumber] = useState("");
+  const [businessType, setBusinessType] = useState("");
+  const [companyDescription, setCompanyDescription] = useState("");
+  const [establishedYear, setEstablishedYear] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
@@ -38,6 +47,13 @@ export default function AuthPage() {
   const [companyState, setCompanyState] = useState("");
   const [companyPincode, setCompanyPincode] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
+  
+  // Document upload states
+  const [registrationCert, setRegistrationCert] = useState<File | null>(null);
+  const [gstCert, setGstCert] = useState<File | null>(null);
+  const [panCard, setPanCard] = useState<File | null>(null);
+  const [addressProof, setAddressProof] = useState<File | null>(null);
+  const [bankStatement, setBankStatement] = useState<File | null>(null);
   
   // Seller specific fields
   const [shopName, setShopName] = useState("");
@@ -49,9 +65,14 @@ export default function AuthPage() {
   const [sellerCity, setSellerCity] = useState("");
   const [sellerState, setSellerState] = useState("");
   const [sellerPincode, setSellerPincode] = useState("");
-  const [establishedYear, setEstablishedYear] = useState("");
+  const [sellerEstablishedYear, setSellerEstablishedYear] = useState("");
   const [businessDescription, setBusinessDescription] = useState("");
   const [productCategories, setProductCategories] = useState<string[]>([]);
+  const [sellerGstNumber, setSellerGstNumber] = useState("");
+  const [sellerPanNumber, setSellerPanNumber] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankIfscCode, setBankIfscCode] = useState("");
+  const [bankName, setBankName] = useState("");
   
   // User specific fields
   const [phone, setPhone] = useState("");
@@ -71,16 +92,20 @@ export default function AuthPage() {
     contactPerson: "",
     contactPhone: "",
     phone: "",
-    shopAddress: ""
+    shopAddress: "",
+    panNumber: "",
+    gstNumber: "",
+    bankAccountNumber: "",
+    bankIfscCode: ""
   });
 
   // Carousel images
   const carouselImages = [
-    { id: 1, url: "/images/mysore-palace.jpeg", title: "Mysore Palace", location: "Mysuru", description: "A testament to royal grandeur" },
-    { id: 2, url: "/images/hampi.jpeg", title: "Hampi Ruins", location: "Hampi", description: "Where stones tell ancient stories" },
-    { id: 3, url: "/images/coorg.jpeg", title: "Coorg Valley", location: "Madikeri", description: "Scotland of India" },
-    { id: 4, url: "/images/gokarna.jpeg", title: "Gokarna Beach", location: "Gokarna", description: "Where serenity meets the sea" },
-    { id: 5, url: "/images/kabini.jpeg", title: "Kabini Wildlife", location: "Kabini", description: "Wilderness at its finest" },
+    { id: 1, url: "/images/mysore-palace.jpeg", title: "Mysore Palace", location: "Mysuru", description: "A testament to royal grandeur", gradient: "from-amber-500/20 to-orange-600/20" },
+    { id: 2, url: "/images/hampi.jpeg", title: "Hampi Ruins", location: "Hampi", description: "Where stones tell ancient stories", gradient: "from-stone-500/20 to-amber-600/20" },
+    { id: 3, url: "/images/coorg.jpeg", title: "Coorg Valley", location: "Madikeri", description: "Scotland of India", gradient: "from-emerald-500/20 to-teal-600/20" },
+    { id: 4, url: "/images/gokarna.jpeg", title: "Gokarna Beach", location: "Gokarna", description: "Where serenity meets the sea", gradient: "from-blue-500/20 to-cyan-600/20" },
+    { id: 5, url: "/images/kabini.jpeg", title: "Kabini Wildlife", location: "Kabini", description: "Wilderness at its finest", gradient: "from-green-500/20 to-emerald-600/20" },
   ];
 
   // Auto-slide effect
@@ -122,11 +147,15 @@ export default function AuthPage() {
       contactPerson: "",
       contactPhone: "",
       phone: "",
-      shopAddress: ""
+      shopAddress: "",
+      panNumber: "",
+      gstNumber: "",
+      bankAccountNumber: "",
+      bankIfscCode: ""
     };
     let isValid = true;
 
-    // Email validation
+    // Email validation (always required)
     if (!email) {
       newErrors.email = "Email is required";
       isValid = false;
@@ -135,24 +164,34 @@ export default function AuthPage() {
       isValid = false;
     }
 
-    // Password validation
-    if (!password) {
-      newErrors.password = "Password is required";
-      isValid = false;
-    } else if (password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
-      isValid = false;
-    } else if (!isLogin && !/(?=.*[A-Za-z])(?=.*\d)/.test(password)) {
-      newErrors.password = "Password must contain at least one letter and one number";
-      isValid = false;
+    // Password validation - only for login or user registration
+    if (isLogin || userType === 'user') {
+      if (!password) {
+        newErrors.password = "Password is required";
+        isValid = false;
+      } else if (password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters";
+        isValid = false;
+      } else if (!isLogin && !/(?=.*[A-Za-z])(?=.*\d)/.test(password)) {
+        newErrors.password = "Password must contain at least one letter and one number";
+        isValid = false;
+      }
     }
 
     // Sign-up specific validations
     if (!isLogin) {
-      // Common validation based on user type
       if (userType === 'user') {
         if (!name) {
           newErrors.name = "Full name is required";
+          isValid = false;
+        }
+        
+        // Confirm password only for user registration
+        if (!confirmPassword) {
+          newErrors.confirmPassword = "Please confirm your password";
+          isValid = false;
+        } else if (password !== confirmPassword) {
+          newErrors.confirmPassword = "Passwords do not match";
           isValid = false;
         }
       } else if (userType === 'enterprise') {
@@ -162,6 +201,10 @@ export default function AuthPage() {
         }
         if (!registrationNumber) {
           newErrors.registrationNumber = "Registration number is required";
+          isValid = false;
+        }
+        if (!panNumber) {
+          newErrors.panNumber = "PAN number is required";
           isValid = false;
         }
         if (!contactPerson) {
@@ -189,16 +232,17 @@ export default function AuthPage() {
           newErrors.shopAddress = "Shop address is required";
           isValid = false;
         }
+        if (!bankAccountNumber) {
+          newErrors.bankAccountNumber = "Bank account number is required";
+          isValid = false;
+        }
+        if (!bankIfscCode) {
+          newErrors.bankIfscCode = "IFSC code is required";
+          isValid = false;
+        }
       }
 
-      if (!confirmPassword) {
-        newErrors.confirmPassword = "Please confirm your password";
-        isValid = false;
-      } else if (password !== confirmPassword) {
-        newErrors.confirmPassword = "Passwords do not match";
-        isValid = false;
-      }
-
+      // Terms agreement for all signups
       if (!agreedToTerms) {
         newErrors.terms = "You must agree to the Terms & Conditions";
         isValid = false;
@@ -225,140 +269,133 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
-      const API_URL = 'http://localhost:5000';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       
-      if (isLogin) {
-        // Login API call
-        const response = await fetch(`${API_URL}/api/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            rememberMe
-          }),
-        });
+      // In your AuthPage component, update the login section:
 
-        const data = await response.json();
+if (isLogin) {
+  // Login API call
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, rememberMe }),
+  });
 
-        if (!response.ok) {
-          throw new Error(data.message || 'Login failed');
-        }
+  const data = await response.json();
 
-        // Store token
-        localStorage.setItem('token', data.data.token);
-        if (data.data.refreshToken) {
-          localStorage.setItem('refreshToken', data.data.refreshToken);
-        }
-        if (data.data.user) {
-          localStorage.setItem('user', JSON.stringify(data.data.user));
-        }
+  if (!response.ok) throw new Error(data.message);
 
-        setSuccessMessage(`Welcome back! You've successfully signed in.`);
-        showToastMessage("Login successful! Redirecting...", "success");
+  if (data.success && data.data?.token) {
+    localStorage.clear();
+    localStorage.setItem('token', data.data.token);
+    if (data.data.user) {
+      localStorage.setItem('user', JSON.stringify(data.data.user));
+    }
+    
+    showToastMessage("Login successful! Redirecting...", "success");
+    
+    // Use the redirectTo from the response
+    const redirectPath = data.data.redirectTo || '/dashboard';
+    console.log('Redirecting to:', redirectPath);
+    
+    setTimeout(() => {
+      window.location.href = redirectPath;
+    }, 1000);
+  }
+}else {
+        // Signup with multi-step data
+        const formData = new FormData();
         
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 1500);
-      } else {
-        // Signup API call based on user type
-        let profileData: any = {
-          email,
-          password,
-          user_type: userType
-        };
-
+        // Common fields
+        formData.append('email', email);
+        formData.append('password', password);
+        formData.append('userType', userType);
+        
         if (userType === 'user') {
-          profileData = {
-            ...profileData,
-            full_name: name,
-            phone: phone || undefined,
-            date_of_birth: dateOfBirth || undefined,
-            gender: gender || undefined,
-            city: city || undefined,
-            state: state || undefined,
-            country: 'India'
-          };
+          formData.append('name', name);
+          formData.append('phone', phone);
+          formData.append('dateOfBirth', dateOfBirth);
+          formData.append('gender', gender);
+          formData.append('city', city);
+          formData.append('state', state);
         } else if (userType === 'enterprise') {
-          profileData = {
-            ...profileData,
-            company_name: companyName,
-            registration_number: registrationNumber,
-            gst_number: gstNumber || undefined,
-            contact_person: contactPerson,
-            contact_email: email,
-            contact_phone: contactPhone,
-            address: companyAddress || undefined,
-            city: companyCity || undefined,
-            state: companyState || undefined,
-            pincode: companyPincode || undefined,
-            website: companyWebsite || undefined
-          };
+          formData.append('companyName', companyName);
+          formData.append('registrationNumber', registrationNumber);
+          formData.append('gstNumber', gstNumber);
+          formData.append('panNumber', panNumber);
+          formData.append('businessType', businessType);
+          formData.append('companyDescription', companyDescription);
+          formData.append('establishedYear', establishedYear);
+          formData.append('employeeCount', employeeCount);
+          formData.append('contactPerson', contactPerson);
+          formData.append('contactPhone', contactPhone);
+          formData.append('companyAddress', companyAddress);
+          formData.append('companyCity', companyCity);
+          formData.append('companyState', companyState);
+          formData.append('companyPincode', companyPincode);
+          formData.append('companyWebsite', companyWebsite);
+          
+          // Documents
+          if (registrationCert) formData.append('registrationCert', registrationCert);
+          if (gstCert) formData.append('gstCert', gstCert);
+          if (panCard) formData.append('panCard', panCard);
+          if (addressProof) formData.append('addressProof', addressProof);
+          if (bankStatement) formData.append('bankStatement', bankStatement);
         } else if (userType === 'seller') {
-          profileData = {
-            ...profileData,
-            shop_name: shopName,
-            owner_name: ownerName,
-            shop_type: shopType || undefined,
-            phone: sellerPhone,
-            alternate_phone: sellerAlternatePhone || undefined,
-            email: email,
-            shop_address: shopAddress,
-            city: sellerCity || undefined,
-            state: sellerState || undefined,
-            pincode: sellerPincode || undefined,
-            established_year: establishedYear ? parseInt(establishedYear) : undefined,
-            business_description: businessDescription || undefined,
-            product_categories: productCategories
-          };
+          formData.append('shopName', shopName);
+          formData.append('ownerName', ownerName);
+          formData.append('shopType', shopType);
+          formData.append('sellerPhone', sellerPhone);
+          formData.append('sellerAlternatePhone', sellerAlternatePhone);
+          formData.append('shopAddress', shopAddress);
+          formData.append('sellerCity', sellerCity);
+          formData.append('sellerState', sellerState);
+          formData.append('sellerPincode', sellerPincode);
+          formData.append('establishedYear', sellerEstablishedYear);
+          formData.append('businessDescription', businessDescription);
+          formData.append('productCategories', JSON.stringify(productCategories));
+          formData.append('gstNumber', sellerGstNumber);
+          formData.append('panNumber', sellerPanNumber);
+          formData.append('bankAccountNumber', bankAccountNumber);
+          formData.append('bankIfscCode', bankIfscCode);
+          formData.append('bankName', bankName);
         }
 
-        const response = await fetch(`${API_URL}/api/auth/register/${userType}`, {
+        const response = await fetch(`${API_URL}/auth/register`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(profileData),
+          body: formData,
         });
 
         const data = await response.json();
 
-        if (!response.ok) {
-          throw new Error(data.message || 'Registration failed');
-        }
+        if (!response.ok) throw new Error(data.message);
 
-        setSuccessMessage(`Welcome to Samskruthi Sahaachari! Your account has been created.`);
-        showToastMessage("Account created successfully! Please sign in.", "success");
-        
-        // Reset form
-        setName("");
-        setCompanyName("");
-        setShopName("");
-        setEmail("");
-        setPassword("");
-        setConfirmPassword("");
-        setAgreedToTerms(false);
-        setRegistrationNumber("");
-        setContactPerson("");
-        setContactPhone("");
-        setOwnerName("");
-        setSellerPhone("");
-        setShopAddress("");
-        
-        setTimeout(() => {
-          setIsLogin(true);
-        }, 2000);
+        if (data.success) {
+          setSuccessMessage(userType === 'user' 
+            ? "Account created successfully! Please check your email."
+            : "Registration submitted for approval! You'll receive an email once verified.");
+          setShowSuccess(true);
+          
+          // Reset form
+          setTimeout(() => {
+            setIsLogin(true);
+            setShowSuccess(false);
+            setRegStep(1);
+          }, 3000);
+        }
       }
-      
-      setShowSuccess(true);
     } catch (error: any) {
-      console.error('Auth error:', error);
-      showToastMessage(error.message || "An error occurred. Please try again.", "error");
+      showToastMessage(error.message || "An error occurred", "error");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const nextStep = () => setRegStep(prev => prev + 1);
+  const prevStep = () => setRegStep(prev => prev - 1);
+
+  const addCategory = () => {
+    // This would be implemented with an input field
   };
 
   return (
@@ -368,67 +405,106 @@ export default function AuthPage() {
         : "bg-gradient-to-br from-gray-50 via-white to-gray-50 text-gray-900"
     } overflow-hidden`}>
       
-      {/* Toast Notification */}
-      <div
-        className={`fixed top-24 right-6 z-50 transform transition-all duration-500 ${
-          showToast ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
-        }`}
-      >
-        <div className={`flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl backdrop-blur-md border ${
-          toastType === "success" 
-            ? isDarkMode 
-              ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400" 
-              : "bg-emerald-50 border-emerald-200 text-emerald-700"
-            : toastType === "error"
-            ? isDarkMode 
-              ? "bg-red-500/20 border-red-500/30 text-red-400" 
-              : "bg-red-50 border-red-200 text-red-700"
-            : isDarkMode 
-              ? "bg-blue-500/20 border-blue-500/30 text-blue-400" 
-              : "bg-blue-50 border-blue-200 text-blue-700"
-        }`}>
-          {toastType === "success" && (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-          {toastType === "error" && (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          )}
-          {toastType === "info" && (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          )}
-          <span className="text-sm font-medium">{toastMessage}</span>
-        </div>
+      {/* Animated Background */}
+      <div className="fixed inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-blue-500/5" />
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            rotate: [0, 90, 0],
+          }}
+          transition={{ duration: 20, repeat: Infinity }}
+          className="absolute top-0 -left-4 w-72 h-72 bg-emerald-500 rounded-full mix-blend-multiply filter blur-xl opacity-10"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.3, 1],
+            rotate: [0, -90, 0],
+          }}
+          transition={{ duration: 25, repeat: Infinity }}
+          className="absolute top-0 -right-4 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-10"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.1, 1],
+            rotate: [0, 45, 0],
+          }}
+          transition={{ duration: 18, repeat: Infinity }}
+          className="absolute -bottom-8 left-20 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-10"
+        />
       </div>
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: 50 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            exit={{ opacity: 0, y: -50, x: 50 }}
+            className="fixed top-6 right-6 z-50"
+          >
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl backdrop-blur-xl border ${
+              toastType === "success" 
+                ? isDarkMode 
+                  ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400" 
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : toastType === "error"
+                ? isDarkMode 
+                  ? "bg-red-500/20 border-red-500/30 text-red-400" 
+                  : "bg-red-50 border-red-200 text-red-700"
+                : isDarkMode 
+                  ? "bg-blue-500/20 border-blue-500/30 text-blue-400" 
+                  : "bg-blue-50 border-blue-200 text-blue-700"
+            }`}>
+              {toastType === "success" && (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {toastType === "error" && (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              {toastType === "info" && (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className="text-sm font-medium">{toastMessage}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Theme Toggle & Home Button */}
       <div className="fixed top-6 right-6 z-50 flex gap-3">
-        <Link href="/">
-          <button className={`p-3 rounded-xl backdrop-blur-md transition-all duration-300 hover:scale-110 ${
-            isDarkMode 
-              ? "bg-white/10 text-white/80 hover:bg-white/20 border border-white/10" 
-              : "bg-black/5 text-gray-700 hover:bg-black/10 border border-gray-200"
-          }`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </button>
-        </Link>
-        <button
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+          <Link href="/">
+            <button className={`p-3 rounded-2xl backdrop-blur-xl transition-all duration-300 border ${
+              isDarkMode 
+                ? "bg-white/5 border-white/10 hover:bg-white/10" 
+                : "bg-black/5 border-gray-200/50 hover:bg-black/10"
+            }`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </button>
+          </Link>
+        </motion.div>
+        
+        <motion.button
+          whileHover={{ scale: 1.1, rotate: isDarkMode ? 180 : 0 }}
+          whileTap={{ scale: 0.95 }}
           onClick={toggleTheme}
-          className={`p-3 rounded-xl backdrop-blur-md transition-all duration-300 hover:scale-110 ${
+          className={`p-3 rounded-2xl backdrop-blur-xl transition-all duration-300 border ${
             isDarkMode 
-              ? "bg-white/10 text-white/80 hover:bg-white/20 border border-white/10" 
-              : "bg-black/5 text-gray-700 hover:bg-black/10 border border-gray-200"
+              ? "bg-white/5 border-white/10 hover:bg-white/10" 
+              : "bg-black/5 border-gray-200/50 hover:bg-black/10"
           }`}
         >
           {isDarkMode ? (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           ) : (
@@ -436,221 +512,475 @@ export default function AuthPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
           )}
-        </button>
+        </motion.button>
       </div>
 
       {/* Main Container */}
       <div className="flex h-screen w-full">
-        {/* Left Side - Carousel Section (50%) */}
+        {/* Left Side - 3D Carousel */}
         <div className="relative w-1/2 h-full overflow-hidden">
-          {carouselImages.map((image, index) => (
-            <div
-              key={image.id}
-              className={`absolute inset-0 transition-all duration-1000 ${
-                index === currentSlide ? "opacity-100 scale-100" : "opacity-0 scale-110"
-              }`}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentSlide}
+              initial={{ opacity: 0, scale: 1.1 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 1 }}
+              className="absolute inset-0"
             >
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10"></div>
+              <div className={`absolute inset-0 bg-gradient-to-br ${carouselImages[currentSlide].gradient} z-10`} />
               <Image
-                src={image.url}
-                alt={image.title}
+                src={carouselImages[currentSlide].url}
+                alt={carouselImages[currentSlide].title}
                 fill
                 className="object-cover"
-                priority={index === 0}
+                priority={currentSlide === 0}
               />
               
+              {/* Floating Elements */}
+              <motion.div
+                animate={{ 
+                  y: [0, -30, 0],
+                  rotate: [0, 10, -10, 0]
+                }}
+                transition={{ duration: 8, repeat: Infinity }}
+                className="absolute top-20 right-20 w-32 h-32 bg-white/10 backdrop-blur-xl rounded-full z-20"
+              />
+              
+              <motion.div
+                animate={{ 
+                  y: [0, 30, 0],
+                  rotate: [0, -10, 10, 0]
+                }}
+                transition={{ duration: 10, repeat: Infinity }}
+                className="absolute bottom-20 left-20 w-40 h-40 bg-emerald-500/10 backdrop-blur-xl rounded-full z-20"
+              />
+
               {/* Caption */}
-              <div className="absolute bottom-16 left-12 z-20 text-white max-w-lg">
-                <p className="text-sm tracking-[0.3em] uppercase mb-3 text-emerald-400 animate-slide-up">
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="absolute bottom-16 left-12 z-30 text-white"
+              >
+                <motion.p 
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-sm tracking-[0.3em] uppercase mb-3 text-emerald-400"
+                >
                   ✦ DISCOVER KARNATAKA
-                </p>
-                <h2 className="text-5xl font-light mb-2 animate-slide-up-delay">
-                  {image.title}
-                </h2>
-                <p className="text-white/80 text-lg mb-2 animate-slide-up-delay-2">
-                  {image.location}
-                </p>
-                <p className="text-white/60 text-base max-w-md animate-slide-up-delay-3">
-                  {image.description}
-                </p>
+                </motion.p>
+                <motion.h2 
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.7 }}
+                  className="text-6xl font-bold mb-2"
+                >
+                  {carouselImages[currentSlide].title}
+                </motion.h2>
+                <motion.p 
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.9 }}
+                  className="text-white/80 text-xl mb-2"
+                >
+                  {carouselImages[currentSlide].location}
+                </motion.p>
+                <motion.p 
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 1.1 }}
+                  className="text-white/60 text-lg max-w-md"
+                >
+                  {carouselImages[currentSlide].description}
+                </motion.p>
                 
                 {/* Progress Indicators */}
-                <div className="flex gap-2 mt-8">
+                <div className="flex gap-3 mt-8">
                   {carouselImages.map((_, idx) => (
                     <button
                       key={idx}
                       onClick={() => setCurrentSlide(idx)}
-                      className={`h-1 rounded-full transition-all duration-500 ${
-                        idx === currentSlide 
-                          ? "w-12 bg-emerald-400" 
-                          : "w-4 bg-white/30 hover:bg-white/50"
-                      }`}
-                    />
+                      className="group relative h-1 rounded-full overflow-hidden"
+                    >
+                      <div className={`w-12 h-full bg-white/30 rounded-full transition-all duration-300`}>
+                        <motion.div
+                          animate={{ width: idx === currentSlide ? "100%" : "0%" }}
+                          transition={{ duration: 5 }}
+                          className="h-full bg-emerald-400 rounded-full"
+                        />
+                      </div>
+                    </button>
                   ))}
                 </div>
-              </div>
-            </div>
-          ))}
+              </motion.div>
+            </motion.div>
+          </AnimatePresence>
 
-          {/* Floating Brand */}
+          {/* Brand Logo */}
           <Link href="/">
-            <div className="absolute top-8 left-8 z-20 cursor-pointer group">
+            <motion.div
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="absolute top-8 left-8 z-40 cursor-pointer group"
+            >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-500 rounded-xl rotate-12 group-hover:rotate-45 transition-all duration-500"></div>
+                <motion.div
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 4, repeat: Infinity }}
+                  className="w-14 h-14 bg-gradient-to-r from-emerald-400 to-teal-400 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-2xl group-hover:scale-110 transition-transform"
+                >
+                  KS
+                </motion.div>
                 <div>
-                  <h3 className="text-white text-xl font-light tracking-wider">Samskruthi</h3>
-                  <p className="text-white/40 text-[8px] tracking-[0.3em] uppercase">Sahaachari</p>
+                  <h3 className="text-white text-2xl font-light tracking-wider">Samskruthi</h3>
+                  <p className="text-white/40 text-[10px] tracking-[0.3em] uppercase">Cultural Heritage</p>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </Link>
         </div>
 
-        {/* Right Side - Auth Forms (50%) */}
-        <div className={`w-1/2 h-full overflow-y-auto ${
-          isDarkMode ? "bg-gray-900" : "bg-white"
-        }`}>
-          <div className="min-h-full flex items-center justify-center py-12">
-            <div className="w-full max-w-md px-8">
+        {/* Right Side - Auth Forms */}
+        <div className={`w-1/2 h-full overflow-y-auto relative ${
+          isDarkMode ? "bg-gray-900/80" : "bg-white/80"
+        } backdrop-blur-xl`}>
+          <div className="min-h-full flex items-center justify-center py-12 px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full max-w-md"
+            >
               {/* Welcome Text */}
-              <div className="mb-8">
-                <h2 className={`text-3xl font-light mb-2 ${
-                  isDarkMode ? "text-white" : "text-gray-900"
-                }`}>
-                  {isLogin ? "Welcome back" : "Begin your journey"}
-                </h2>
-                <p className={`text-sm ${
-                  isDarkMode ? "text-gray-400" : "text-gray-500"
-                }`}>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 text-center"
+              >
+                <motion.h2 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-4xl font-bold mb-3 bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent"
+                >
+                  {isLogin ? "Welcome Back" : "Join Our Community"}
+                </motion.h2>
+                <motion.p 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}
+                >
                   {isLogin 
-                    ? "Sign in to continue exploring Karnataka's wonders" 
-                    : "Create an account to start your cultural adventure"}
-                </p>
-              </div>
+                    ? "Sign in to continue your heritage journey" 
+                    : "Choose your path and start your adventure"}
+                </motion.p>
+              </motion.div>
 
-              {/* User Type Selection - Only for Sign Up */}
+              {/* User Type Selection - 3D Cards */}
               {!isLogin && (
-                <div className="mb-6">
-                  <label className={`block text-xs mb-2 ${
-                    isDarkMode ? "text-gray-400" : "text-gray-600"
-                  }`}>
-                    I am a
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mb-8"
+                >
+                  <label className={`block text-xs mb-3 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                    I want to join as
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-3">
                     {[
-                      { type: "user", label: "Traveler", icon: "🧳" },
-                      { type: "enterprise", label: "Enterprise", icon: "🏢" },
-                      { type: "seller", label: "Seller", icon: "🏪" },
+                      { type: "user", label: "Traveler", icon: "🧳", gradient: "from-emerald-500 to-teal-500", desc: "Explore heritage sites" },
+                      { type: "enterprise", label: "Enterprise", icon: "🏢", gradient: "from-blue-500 to-indigo-500", desc: "List & manage sites" },
+                      { type: "seller", label: "Seller", icon: "🏪", gradient: "from-purple-500 to-pink-500", desc: "Sell local products" },
                     ].map((option) => (
-                      <button
+                      <motion.button
                         key={option.type}
-                        type="button"
-                        onClick={() => setUserType(option.type as any)}
-                        className={`py-2 px-3 rounded-lg text-xs font-medium transition-all duration-300 border ${
-                          userType === option.type
-                            ? "bg-emerald-500 text-white border-emerald-500"
-                            : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700"
-                              : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
-                        }`}
+                        whileHover={{ y: -5, scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          setUserType(option.type as any);
+                          setRegStep(1);
+                        }}
+                        className="group perspective"
                       >
-                        <span className="block text-lg mb-1">{option.icon}</span>
-                        {option.label}
-                      </button>
+                        <div className={`relative p-4 rounded-2xl transition-all duration-300 transform-gpu preserve-3d ${
+                          userType === option.type
+                            ? `bg-gradient-to-br ${option.gradient} text-white shadow-xl scale-105`
+                            : isDarkMode
+                              ? "bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800"
+                              : "bg-white/50 border border-gray-200/50 hover:bg-white"
+                        }`}>
+                          {/* 3D Hover Effect */}
+                          <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br ${option.gradient} blur-xl`} />
+                          
+                          <div className="relative z-10">
+                            <span className="text-3xl mb-2 block">{option.icon}</span>
+                            <p className="text-sm font-medium mb-1">{option.label}</p>
+                            <p className={`text-[10px] ${userType === option.type ? 'text-white/80' : isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                              {option.desc}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.button>
                     ))}
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {/* Success Message */}
-              {showSuccess && (
-                <div className={`mb-6 p-4 rounded-lg border ${
-                  isDarkMode 
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
-                    : "bg-emerald-50 border-emerald-200 text-emerald-700"
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <p className="text-sm">{successMessage}</p>
-                  </div>
-                </div>
-              )}
+              <AnimatePresence>
+                {showSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className={`mb-6 p-4 rounded-lg border ${
+                      isDarkMode 
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" 
+                        : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm">{successMessage}</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Toggle Buttons */}
-              <div className={`flex p-1 rounded-xl mb-8 ${
-                isDarkMode ? "bg-gray-800" : "bg-gray-100"
-              }`}>
-                <button
-                  onClick={() => {
-                    setIsLogin(true);
-                    setShowSuccess(false);
-                    setErrors({ name: "", email: "", password: "", confirmPassword: "", terms: "", registrationNumber: "", contactPerson: "", contactPhone: "", phone: "", shopAddress: "" });
-                  }}
-                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
-                    isLogin
-                      ? "bg-emerald-500 text-white shadow-lg"
-                      : isDarkMode
-                        ? "text-gray-400 hover:text-white"
-                        : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => {
-                    setIsLogin(false);
-                    setShowSuccess(false);
-                    setErrors({ name: "", email: "", password: "", confirmPassword: "", terms: "", registrationNumber: "", contactPerson: "", contactPhone: "", phone: "", shopAddress: "" });
-                  }}
-                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
-                    !isLogin
-                      ? "bg-emerald-500 text-white shadow-lg"
-                      : isDarkMode
-                        ? "text-gray-400 hover:text-white"
-                        : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Sign Up
-                </button>
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className={`flex p-1.5 rounded-2xl mb-8 ${
+                  isDarkMode ? "bg-gray-800/50" : "bg-gray-100/50"
+                } backdrop-blur-xl border ${isDarkMode ? "border-gray-700/50" : "border-gray-200/50"}`}
+              >
+                {["Sign In", "Sign Up"].map((label, idx) => (
+                  <motion.button
+                    key={label}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setIsLogin(idx === 0);
+                      setRegStep(1);
+                    }}
+                    className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                      (idx === 0 && isLogin) || (idx === 1 && !isLogin)
+                        ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg"
+                        : isDarkMode
+                          ? "text-gray-400 hover:text-white"
+                          : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    {label}
+                  </motion.button>
+                ))}
+              </motion.div>
 
               {/* Auth Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* User Type Specific Fields */}
-                {!isLogin && userType === 'user' && (
-                  <>
+                {/* Progress Steps for Enterprise/Seller */}
+                {!isLogin && (userType === 'enterprise' || userType === 'seller') && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6"
+                  >
+                    <div className="relative">
+                      <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200 dark:bg-gray-700" />
+                      <div className="relative flex justify-between">
+                        {[1, 2, 3, 4].map((step) => (
+                          <div key={step} className="flex flex-col items-center">
+                            <motion.div
+                              animate={{ scale: regStep >= step ? 1.1 : 1 }}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                regStep >= step
+                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                                  : isDarkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-200 text-gray-600'
+                              }`}
+                            >
+                              {regStep > step ? '✓' : step}
+                            </motion.div>
+                            <span className={`text-[10px] mt-1 ${
+                              regStep >= step ? 'text-emerald-500' : isDarkMode ? 'text-gray-600' : 'text-gray-400'
+                            }`}>
+                              {step === 1 && 'Basic'}
+                              {step === 2 && 'Contact'}
+                              {step === 3 && 'Business'}
+                              {step === 4 && 'Documents'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Login Form */}
+                {isLogin && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-4"
+                  >
+                    {/* Email Field */}
                     <div className="group">
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Email Address
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className={`w-full px-4 py-3 pl-11 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                          placeholder="Enter your email"
+                        />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={passwordVisible ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className={`w-full px-4 py-3 pl-11 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                          placeholder="Enter your password"
+                        />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500"
+                        >
+                          {passwordVisible ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Remember Me & Forgot Password */}
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
+                        />
+                        <span className={`text-xs transition-colors ${
+                          isDarkMode ? "text-gray-400 group-hover:text-gray-300" : "text-gray-500 group-hover:text-gray-700"
+                        }`}>
+                          Remember me
+                        </span>
+                      </label>
+                      <button type="button" className={`text-xs hover:text-emerald-400 transition-colors relative group ${
+                        isDarkMode ? "text-gray-400" : "text-gray-500"
                       }`}>
+                        Forgot password?
+                        <span className="absolute -bottom-1 left-0 w-0 h-px bg-emerald-400 group-hover:w-full transition-all duration-300"></span>
+                      </button>
+                    </div>
+
+                    {/* Login Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.02, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-medium hover:shadow-xl hover:shadow-emerald-500/30 transition-all duration-300 relative overflow-hidden group"
+                    >
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        {isLoading ? (
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : (
+                          <>
+                            Sign In
+                            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                          </>
+                        )}
+                      </span>
+                      <div className="absolute inset-0 bg-white/20 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
+                    </motion.button>
+                  </motion.div>
+                )}
+
+                {/* User Registration */}
+                {!isLogin && userType === 'user' && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    {/* Full Name */}
+                    <div className="group">
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Full Name <span className="text-emerald-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={name}
-                        onChange={(e) => {
-                          setName(e.target.value);
-                          clearFieldError("name");
-                        }}
+                        onChange={(e) => setName(e.target.value)}
                         placeholder="Enter your full name"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           errors.name
                             ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
+                              ? "border-red-500/50 bg-red-500/10"
                               : "border-red-300 bg-red-50"
                             : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
+                      {errors.name && (
+                        <p className="text-xs text-red-500 mt-1">{errors.name}</p>
+                      )}
                     </div>
 
+                    {/* Phone */}
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Phone Number
                       </label>
                       <input
@@ -658,45 +988,42 @@ export default function AuthPage() {
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="Enter your phone number"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
+                    {/* Date of Birth and Gender */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           Date of Birth
                         </label>
                         <input
                           type="date"
                           value={dateOfBirth}
                           onChange={(e) => setDateOfBirth(e.target.value)}
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           Gender
                         </label>
                         <select
                           value={gender}
                           onChange={(e) => setGender(e.target.value)}
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         >
                           <option value="">Select</option>
@@ -707,11 +1034,10 @@ export default function AuthPage() {
                       </div>
                     </div>
 
+                    {/* City and State */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           City
                         </label>
                         <input
@@ -719,17 +1045,15 @@ export default function AuthPage() {
                           value={city}
                           onChange={(e) => setCity(e.target.value)}
                           placeholder="City"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           State
                         </label>
                         <input
@@ -737,76 +1061,194 @@ export default function AuthPage() {
                           value={state}
                           onChange={(e) => setState(e.target.value)}
                           placeholder="State"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                     </div>
-                  </>
+
+                    {/* Email and Password for User */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Email Address <span className="text-emerald-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          errors.email
+                            ? isDarkMode
+                              ? "border-red-500/50 bg-red-500/10"
+                              : "border-red-300 bg-red-50"
+                            : isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      />
+                    </div>
+
+                    {/* Password Field */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Password <span className="text-emerald-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={passwordVisible ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.password
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none pr-12`}
+                          placeholder="Enter your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500"
+                        >
+                          {passwordVisible ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Confirm Password */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Confirm Password <span className="text-emerald-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={confirmPasswordVisible ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.confirmPassword
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none pr-12`}
+                          placeholder="Confirm your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500"
+                        >
+                          {confirmPasswordVisible ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
                 )}
 
-                {/* Enterprise Specific Fields */}
-                {!isLogin && userType === 'enterprise' && (
-                  <>
+                {/* Enterprise Registration - Step 1: Basic Info */}
+                {!isLogin && userType === 'enterprise' && regStep === 1 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Company Information</h3>
+                    
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Company Name <span className="text-emerald-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={companyName}
-                        onChange={(e) => {
-                          setCompanyName(e.target.value);
-                          clearFieldError("name");
-                        }}
+                        onChange={(e) => setCompanyName(e.target.value)}
                         placeholder="Enter company name"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           errors.name
                             ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
+                              ? "border-red-500/50 bg-red-500/10"
                               : "border-red-300 bg-red-50"
                             : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Registration Number <span className="text-emerald-500">*</span>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Registration No. <span className="text-emerald-500">*</span>
                         </label>
                         <input
                           type="text"
                           value={registrationNumber}
-                          onChange={(e) => {
-                            setRegistrationNumber(e.target.value);
-                            clearFieldError("registrationNumber");
-                          }}
+                          onChange={(e) => setRegistrationNumber(e.target.value)}
                           placeholder="Registration number"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             errors.registrationNumber
                               ? isDarkMode
-                                ? "border-red-500/50 bg-red-500/5"
+                                ? "border-red-500/50 bg-red-500/10"
                                 : "border-red-300 bg-red-50"
                               : isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                                : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          PAN Number <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={panNumber}
+                          onChange={(e) => setPanNumber(e.target.value)}
+                          placeholder="PAN number"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.panNumber
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           GST Number
                         </label>
                         <input
@@ -814,147 +1256,221 @@ export default function AuthPage() {
                           value={gstNumber}
                           onChange={(e) => setGstNumber(e.target.value)}
                           placeholder="GST number"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                        } outline-none`}
-                      />
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Business Type
+                        </label>
+                        <select
+                          value={businessType}
+                          onChange={(e) => setBusinessType(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        >
+                          <option value="">Select type</option>
+                          <option value="heritage">Heritage Site Management</option>
+                          <option value="hospitality">Hospitality & Tourism</option>
+                          <option value="travel">Travel Agency</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Established Year
+                        </label>
+                        <input
+                          type="number"
+                          value={establishedYear}
+                          onChange={(e) => setEstablishedYear(e.target.value)}
+                          placeholder="YYYY"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Employee Count
+                        </label>
+                        <input
+                          type="number"
+                          value={employeeCount}
+                          onChange={(e) => setEmployeeCount(e.target.value)}
+                          placeholder="Number of employees"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
                       </div>
                     </div>
 
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Company Description
+                      </label>
+                      <textarea
+                        value={companyDescription}
+                        onChange={(e) => setCompanyDescription(e.target.value)}
+                        rows={3}
+                        placeholder="Brief description of your company"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                      />
+                    </div>
+
+                    {/* Email for Enterprise */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Email Address <span className="text-emerald-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          errors.email
+                            ? isDarkMode
+                              ? "border-red-500/50 bg-red-500/10"
+                              : "border-red-300 bg-red-50"
+                            : isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      />
+                    </div>
+
+                    {/* Password for Enterprise - Now visible */}
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Password <span className="text-emerald-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={passwordVisible ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.password
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none pr-12`}
+                          placeholder="Enter your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500"
+                        >
+                          {passwordVisible ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Enterprise Registration - Step 2: Contact Info */}
+                {!isLogin && userType === 'enterprise' && regStep === 2 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Contact Information</h3>
+                    
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Contact Person <span className="text-emerald-500">*</span>
                       </label>
                       <input
                         type="text"
                         value={contactPerson}
-                        onChange={(e) => {
-                          setContactPerson(e.target.value);
-                          clearFieldError("contactPerson");
-                        }}
-                        placeholder="Contact person name"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        onChange={(e) => setContactPerson(e.target.value)}
+                        placeholder="Full name"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           errors.contactPerson
                             ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
+                              ? "border-red-500/50 bg-red-500/10"
                               : "border-red-300 bg-red-50"
                             : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Contact Phone <span className="text-emerald-500">*</span>
                       </label>
                       <input
                         type="tel"
                         value={contactPhone}
-                        onChange={(e) => {
-                          setContactPhone(e.target.value);
-                          clearFieldError("contactPhone");
-                        }}
+                        onChange={(e) => setContactPhone(e.target.value)}
                         placeholder="Phone number"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           errors.contactPhone
                             ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
+                              ? "border-red-500/50 bg-red-500/10"
                               : "border-red-300 bg-red-50"
                             : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
-                        Company Address
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Company Email
                       </label>
-                      <textarea
-                        value={companyAddress}
-                        onChange={(e) => setCompanyAddress(e.target.value)}
-                        placeholder="Address"
-                        rows={2}
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Company email"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          City
-                        </label>
-                        <input
-                          type="text"
-                          value={companyCity}
-                          onChange={(e) => setCompanyCity(e.target.value)}
-                          placeholder="City"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          State
-                        </label>
-                        <input
-                          type="text"
-                          value={companyState}
-                          onChange={(e) => setCompanyState(e.target.value)}
-                          placeholder="State"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Pincode
-                        </label>
-                        <input
-                          type="text"
-                          value={companyPincode}
-                          onChange={(e) => setCompanyPincode(e.target.value)}
-                          placeholder="Pincode"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                    </div>
-
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Website
                       </label>
                       <input
@@ -962,409 +1478,304 @@ export default function AuthPage() {
                         value={companyWebsite}
                         onChange={(e) => setCompanyWebsite(e.target.value)}
                         placeholder="https://example.com"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                           isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
-                  </>
-                )}
-
-                {/* Seller Specific Fields */}
-                {!isLogin && userType === 'seller' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Shop Name <span className="text-emerald-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={shopName}
-                          onChange={(e) => {
-                            setShopName(e.target.value);
-                            clearFieldError("name");
-                          }}
-                          placeholder="Shop name"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            errors.name
-                              ? isDarkMode
-                                ? "border-red-500/50 bg-red-500/5"
-                                : "border-red-300 bg-red-50"
-                              : isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                                : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Owner Name <span className="text-emerald-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={ownerName}
-                          onChange={(e) => setOwnerName(e.target.value)}
-                          placeholder="Owner name"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                    </div>
 
                     <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
-                        Shop Type
-                      </label>
-                      <select
-                        value={shopType}
-                        onChange={(e) => setShopType(e.target.value)}
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                          isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                        } outline-none`}
-                      >
-                        <option value="">Select shop type</option>
-                        <option value="handicraft">Handicraft</option>
-                        <option value="silk">Silk & Textiles</option>
-                        <option value="coffee">Coffee & Spices</option>
-                        <option value="sandalwood">Sandalwood</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Phone <span className="text-emerald-500">*</span>
-                        </label>
-                        <input
-                          type="tel"
-                          value={sellerPhone}
-                          onChange={(e) => {
-                            setSellerPhone(e.target.value);
-                            clearFieldError("contactPhone");
-                          }}
-                          placeholder="Phone number"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            errors.contactPhone
-                              ? isDarkMode
-                                ? "border-red-500/50 bg-red-500/5"
-                                : "border-red-300 bg-red-50"
-                              : isDarkMode
-                                ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                                : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
-                          Alternate Phone
-                        </label>
-                        <input
-                          type="tel"
-                          value={sellerAlternatePhone}
-                          onChange={(e) => setSellerAlternatePhone(e.target.value)}
-                          placeholder="Alternate phone"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                            isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          } outline-none`}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
-                        Shop Address <span className="text-emerald-500">*</span>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Address
                       </label>
                       <textarea
-                        value={shopAddress}
-                        onChange={(e) => {
-                          setShopAddress(e.target.value);
-                          clearFieldError("shopAddress");
-                        }}
-                        placeholder="Full shop address"
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
                         rows={2}
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                          errors.shopAddress
-                            ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
-                              : "border-red-300 bg-red-50"
-                            : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        placeholder="Street address"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          isDarkMode
+                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           City
                         </label>
                         <input
                           type="text"
-                          value={sellerCity}
-                          onChange={(e) => setSellerCity(e.target.value)}
+                          value={companyCity}
+                          onChange={(e) => setCompanyCity(e.target.value)}
                           placeholder="City"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           State
                         </label>
                         <input
                           type="text"
-                          value={sellerState}
-                          onChange={(e) => setSellerState(e.target.value)}
+                          value={companyState}
+                          onChange={(e) => setCompanyState(e.target.value)}
                           placeholder="State"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                       <div>
-                        <label className={`block text-xs mb-1.5 ${
-                          isDarkMode ? "text-gray-400" : "text-gray-600"
-                        }`}>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                           Pincode
                         </label>
                         <input
                           type="text"
-                          value={sellerPincode}
-                          onChange={(e) => setSellerPincode(e.target.value)}
+                          value={companyPincode}
+                          onChange={(e) => setCompanyPincode(e.target.value)}
                           placeholder="Pincode"
-                          className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
                             isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                           } outline-none`}
                         />
                       </div>
                     </div>
-
-                    <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
-                        Established Year
-                      </label>
-                      <input
-                        type="number"
-                        value={establishedYear}
-                        onChange={(e) => setEstablishedYear(e.target.value)}
-                        placeholder="YYYY"
-                        min="1800"
-                        max={new Date().getFullYear()}
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                          isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                        } outline-none`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-xs mb-1.5 ${
-                        isDarkMode ? "text-gray-400" : "text-gray-600"
-                      }`}>
-                        Business Description
-                      </label>
-                      <textarea
-                        value={businessDescription}
-                        onChange={(e) => setBusinessDescription(e.target.value)}
-                        placeholder="Brief description of your business"
-                        rows={2}
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                          isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                        } outline-none`}
-                      />
-                    </div>
-                  </>
+                  </motion.div>
                 )}
 
-                {/* Common Fields for all signups */}
-                <div>
-                  <label className={`block text-xs mb-1.5 ${
-                    isDarkMode ? "text-gray-400" : "text-gray-600"
-                  }`}>
-                    Email Address <span className="text-emerald-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      clearFieldError("email");
-                    }}
-                    placeholder="Enter your email"
-                    className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                      errors.email
-                        ? isDarkMode
-                          ? "border-red-500/50 bg-red-500/5"
-                          : "border-red-300 bg-red-50"
-                        : isDarkMode
-                          ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                          : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    } outline-none`}
-                  />
-                </div>
+                {/* Enterprise Registration - Step 3: Documents */}
+                {!isLogin && userType === 'enterprise' && regStep === 3 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Upload Documents</h3>
+                    
+                    <p className={`text-xs mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      Please upload clear scanned copies of the following documents
+                    </p>
 
-                {/* Password Field */}
-                <div>
-                  <label className={`block text-xs mb-1.5 ${
-                    isDarkMode ? "text-gray-400" : "text-gray-600"
-                  }`}>
-                    Password <span className="text-emerald-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={passwordVisible ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        clearFieldError("password");
-                      }}
-                      placeholder="Enter your password"
-                      className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                        errors.password
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Registration Certificate */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        registrationCert
                           ? isDarkMode
-                            ? "border-red-500/50 bg-red-500/5"
-                            : "border-red-300 bg-red-50"
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
                           : isDarkMode
-                            ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                            : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                      } outline-none pr-12`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setPasswordVisible(!passwordVisible)}
-                      className={`absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors ${
-                        isDarkMode ? "text-gray-400 hover:text-emerald-400" : "text-gray-500 hover:text-emerald-500"
-                      }`}
-                    >
-                      {passwordVisible ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setRegistrationCert(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">📜</span>
+                            <span className="text-xs font-medium">Registration Certificate</span>
+                            {registrationCert ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
 
-                {/* Confirm Password - Only for Sign Up */}
-                {!isLogin && (
-                  <div>
-                    <label className={`block text-xs mb-1.5 ${
-                      isDarkMode ? "text-gray-400" : "text-gray-600"
-                    }`}>
-                      Confirm Password <span className="text-emerald-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={confirmPasswordVisible ? "text" : "password"}
-                        value={confirmPassword}
-                        onChange={(e) => {
-                          setConfirmPassword(e.target.value);
-                          clearFieldError("confirmPassword");
-                        }}
-                        placeholder="Confirm your password"
-                        className={`w-full px-4 py-3 rounded-lg text-sm transition-all duration-300 border ${
-                          errors.confirmPassword
-                            ? isDarkMode
-                              ? "border-red-500/50 bg-red-500/5"
-                              : "border-red-300 bg-red-50"
-                            : isDarkMode
-                              ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                              : "bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                        } outline-none pr-12`}
-                      />
-                      <button
+                      {/* GST Certificate */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        gstCert
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setGstCert(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">📑</span>
+                            <span className="text-xs font-medium">GST Certificate</span>
+                            {gstCert ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* PAN Card */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        panCard
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setPanCard(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">🆔</span>
+                            <span className="text-xs font-medium">PAN Card</span>
+                            {panCard ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Address Proof */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        addressProof
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setAddressProof(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">🏠</span>
+                            <span className="text-xs font-medium">Address Proof</span>
+                            {addressProof ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Bank Statement */}
+                      <div className={`col-span-2 p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        bankStatement
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => setBankStatement(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">🏦</span>
+                            <span className="text-xs font-medium">Bank Statement (Last 6 months)</span>
+                            {bankStatement ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Seller Registration Steps would go here - similar structure */}
+                {/* ... */}
+
+                {/* Navigation Buttons for Enterprise/Seller */}
+                {!isLogin && (userType === 'enterprise' || userType === 'seller') && (
+                  <div className="flex gap-3 pt-4">
+                    {regStep > 1 && (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         type="button"
-                        onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
-                        className={`absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors ${
-                          isDarkMode ? "text-gray-400 hover:text-emerald-400" : "text-gray-500 hover:text-emerald-500"
+                        onClick={prevStep}
+                        className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all duration-300 border ${
+                          isDarkMode
+                            ? "border-gray-700 hover:bg-gray-800"
+                            : "border-gray-200 hover:bg-gray-50"
                         }`}
                       >
-                        {confirmPasswordVisible ? (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
+                        Previous
+                      </motion.button>
+                    )}
+                    
+                    {regStep < (userType === 'enterprise' ? 3 : 4) ? (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        type="button"
+                        onClick={nextStep}
+                        className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all duration-300"
+                      >
+                        Next Step
+                      </motion.button>
+                    ) : (
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        type="submit"
+                        disabled={isLoading}
+                        className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 relative overflow-hidden group"
+                      >
+                        {isLoading ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Submitting...
+                          </span>
                         ) : (
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                          </svg>
+                          "Submit for Approval"
                         )}
-                      </button>
-                    </div>
+                      </motion.button>
+                    )}
                   </div>
                 )}
 
-                {/* Forgot Password & Remember Me - Only for Login */}
-                {isLogin && (
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
-                      />
-                      <span className={`text-xs transition-colors ${
-                        isDarkMode ? "text-gray-400 group-hover:text-gray-300" : "text-gray-500 group-hover:text-gray-700"
-                      }`}>
-                        Remember me
-                      </span>
-                    </label>
-                    <button type="button" className={`text-xs hover:text-emerald-400 transition-colors relative group ${
-                      isDarkMode ? "text-gray-400" : "text-gray-500"
-                    }`}>
-                      Forgot password?
-                      <span className="absolute -bottom-1 left-0 w-0 h-px bg-emerald-400 group-hover:w-full transition-all duration-300"></span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Terms & Conditions - Only for Sign Up */}
+                {/* Terms & Conditions */}
                 {!isLogin && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 group">
@@ -1372,12 +1783,7 @@ export default function AuthPage() {
                         type="checkbox"
                         id="terms"
                         checked={agreedToTerms}
-                        onChange={(e) => {
-                          setAgreedToTerms(e.target.checked);
-                          if (e.target.checked) {
-                            clearFieldError("terms");
-                          }
-                        }}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
                         className="w-4 h-4 rounded border-gray-300 text-emerald-500 focus:ring-emerald-500"
                       />
                       <label htmlFor="terms" className={`text-xs transition-colors ${
@@ -1390,42 +1796,35 @@ export default function AuthPage() {
                       </label>
                     </div>
                     {errors.terms && (
-                      <p className={`text-xs ${
-                        isDarkMode ? "text-red-400" : "text-red-500"
-                      }`}>
+                      <p className={`text-xs ${isDarkMode ? "text-red-400" : "text-red-500"}`}>
                         {errors.terms}
                       </p>
                     )}
                   </div>
                 )}
 
-                {/* Submit Button */}
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className={`w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg text-sm font-medium hover:shadow-xl hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all duration-300 mt-6 relative overflow-hidden group ${
-                    isLoading ? "opacity-80 cursor-not-allowed" : ""
-                  }`}
-                >
-                  <span className={`relative z-10 flex items-center justify-center gap-2 ${
-                    isLoading ? "opacity-0" : "opacity-100"
-                  }`}>
-                    {isLogin ? "Sign In" : `Create ${userType === 'enterprise' ? 'Enterprise' : 
-                      userType === 'seller' ? 'Seller' : 'Traveler'} Account`}
-                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                  {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    </div>
-                  )}
-                  <span className="absolute inset-0 bg-white/20 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500"></span>
-                </button>
+                {/* Submit Button for User */}
+                {!isLogin && userType === 'user' && (
+                  <motion.button
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-medium hover:shadow-xl hover:shadow-emerald-500/30 transition-all duration-300 relative overflow-hidden group"
+                  >
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      {isLoading ? (
+                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      ) : (
+                        "Create Traveler Account"
+                      )}
+                    </span>
+                    <div className="absolute inset-0 bg-white/20 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500" />
+                  </motion.button>
+                )}
 
                 {/* Divider */}
                 <div className="relative my-6">
@@ -1450,10 +1849,12 @@ export default function AuthPage() {
                     { name: "Facebook", icon: "f", color: "from-blue-600 to-blue-700" },
                     { name: "Apple", icon: "🍎", color: "from-gray-700 to-gray-900" },
                   ].map((provider) => (
-                    <button
+                    <motion.button
                       key={provider.name}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       type="button"
-                      className={`group relative py-3 rounded-lg border overflow-hidden transition-all duration-300 hover:scale-105 ${
+                      className={`group relative py-3 rounded-lg border overflow-hidden transition-all duration-300 ${
                         isDarkMode
                           ? "bg-gray-800 border-gray-700 hover:bg-gray-700"
                           : "bg-gray-50 border-gray-200 hover:bg-gray-100"
@@ -1463,7 +1864,7 @@ export default function AuthPage() {
                       <span className="relative z-10 text-base font-medium">
                         {provider.icon}
                       </span>
-                    </button>
+                    </motion.button>
                   ))}
                 </div>
               </form>
@@ -1477,7 +1878,8 @@ export default function AuthPage() {
                   onClick={() => {
                     setIsLogin(!isLogin);
                     setShowSuccess(false);
-                    setErrors({ name: "", email: "", password: "", confirmPassword: "", terms: "", registrationNumber: "", contactPerson: "", contactPhone: "", phone: "", shopAddress: "" });
+                    setRegStep(1);
+                    setErrors({ name: "", email: "", password: "", confirmPassword: "", terms: "", registrationNumber: "", contactPerson: "", contactPhone: "", phone: "", shopAddress: "", panNumber: "", gstNumber: "", bankAccountNumber: "", bankIfscCode: "" });
                   }}
                   className="text-emerald-400 hover:text-emerald-500 font-medium relative group"
                 >
@@ -1485,46 +1887,10 @@ export default function AuthPage() {
                   <span className="absolute -bottom-1 left-0 w-0 h-px bg-emerald-400 group-hover:w-full transition-all duration-300"></span>
                 </button>
               </p>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes slide-up {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        .animate-slide-up {
-          animation: slide-up 0.8s ease-out forwards;
-        }
-        
-        .animate-slide-up-delay {
-          animation: slide-up 0.8s ease-out 0.2s forwards;
-          opacity: 0;
-        }
-        
-        .animate-slide-up-delay-2 {
-          animation: slide-up 0.8s ease-out 0.4s forwards;
-          opacity: 0;
-        }
-        
-        .animate-slide-up-delay-3 {
-          animation: slide-up 0.8s ease-out 0.6s forwards;
-          opacity: 0;
-        }
-        
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-      `}</style>
     </div>
   );
 }

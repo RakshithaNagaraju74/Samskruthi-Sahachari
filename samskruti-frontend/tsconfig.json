@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "src/services/userActivityService.js", "src/services/userActivityService.js"  ],
   "exclude": ["node_modules"]
 }

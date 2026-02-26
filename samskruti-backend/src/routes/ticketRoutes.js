@@ -5,6 +5,7 @@ const Ticket = require('../models/Ticket');
 const Booking = require('../models/Booking');
 const { authMiddleware } = require('../middlewares/authMiddleware');
 const rateLimit = require('express-rate-limit');
+const db = require('../config/database');
 
 // Rate limiting for verification
 const verifyLimiter = rateLimit({
@@ -116,9 +117,10 @@ router.get('/user/:userId/upcoming', authMiddleware, async (req, res) => {
 router.get('/:ticketNumber', authMiddleware, async (req, res) => {
     try {
         const { ticketNumber } = req.params;
-
+        
+        // Use the Ticket model instead of direct db query
         const ticket = await Ticket.findByTicketNumber(ticketNumber);
-
+        
         if (!ticket) {
             return res.status(404).json({
                 success: false,
@@ -126,31 +128,187 @@ router.get('/:ticketNumber', authMiddleware, async (req, res) => {
             });
         }
 
-        // Check if user owns the ticket
-        if (ticket.user_id !== req.user.id && req.user.user_type !== 'admin') {
+        // Check if user owns this ticket
+        if (ticket.user_id !== req.user.id) {
             return res.status(403).json({
                 success: false,
                 message: 'Unauthorized to view this ticket'
             });
         }
 
-        // Remove sensitive data
-        delete ticket.qr_token;
-        delete ticket.hash;
-        delete ticket.nonce;
-
+        // Fetch associated booking to get additional details
+        let extendedTicket = { ...ticket };
+        
+        if (ticket.booking_id) {
+            try {
+                const booking = await Booking.findById(ticket.booking_id);
+                if (booking) {
+                    extendedTicket = {
+                        ...ticket,
+                        travel_date: booking.travel_date,
+                        travelers: booking.travelers,
+                        total_amount: booking.total_amount,
+                        booking_reference: booking.booking_reference,
+                    };
+                }
+            } catch (bookingError) {
+                console.error('Error fetching booking details:', bookingError);
+            }
+        }
+        
         res.json({
             success: true,
-            data: ticket
+            data: extendedTicket
         });
     } catch (error) {
         console.error('Error fetching ticket:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch ticket'
+            message: 'Failed to fetch ticket',
+            error: error.message
         });
     }
 });
+
+// ============= MARK TICKET AS USED ENDPOINTS =============
+
+// Staff scans QR code to mark ticket as used (staff/admin only)
+router.post('/tickets/:ticketNumber/use', authMiddleware, async (req, res) => {
+    try {
+        const { ticketNumber } = req.params;
+        const { location, method = 'qr_scan' } = req.body;
+        
+        // Check if user is staff or admin (you need to add this to your user model)
+        // For now, we'll allow any authenticated user, but you should restrict this
+        if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized. Only staff can scan tickets.'
+            });
+        }
+        
+        const result = await Ticket.markAsUsed(ticketNumber, method, location);
+        
+        if (result.success) {
+            res.json({ 
+                success: true, 
+                message: 'Ticket validated successfully!', 
+                data: result.ticket 
+            });
+        } else {
+            res.status(400).json({ 
+                success: false, 
+                message: result.message 
+            });
+        }
+    } catch (error) {
+        console.error('Error marking ticket as used:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// User self check-in with geolocation verification
+router.post('/tickets/self-checkin', authMiddleware, async (req, res) => {
+    try {
+        const { ticketNumber, latitude, longitude } = req.body;
+        const userId = req.user.id;
+        
+        // Get ticket details
+        const ticket = await Ticket.findByTicketNumber(ticketNumber);
+        
+        if (!ticket) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Ticket not found' 
+            });
+        }
+        
+        // Verify ticket belongs to user
+        if (ticket.user_id !== userId) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Unauthorized' 
+            });
+        }
+        
+        // Get site location from database
+        const siteQuery = await db.query(
+            'SELECT latitude, longitude, name FROM heritage_sites WHERE id = $1',
+            [ticket.site_id]
+        );
+        
+        const site = siteQuery.rows[0];
+        
+        if (!site || !site.latitude || !site.longitude) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Site location not available for check-in' 
+            });
+        }
+        
+        // Calculate distance between user and site (using Haversine formula)
+        const distance = calculateDistance(
+            latitude, 
+            longitude, 
+            site.latitude, 
+            site.longitude
+        );
+        
+        // Allow check-in if within 100 meters (0.1 km)
+        if (distance > 0.1) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `You are ${(distance * 1000).toFixed(0)} meters away from the site. Please get closer to check in.`,
+                distance: distance
+            });
+        }
+        
+        // Mark ticket as used
+        const result = await Ticket.markAsUsed(
+            ticketNumber, 
+            'self_checkin', 
+            JSON.stringify({ latitude, longitude })
+        );
+        
+        if (result.success) {
+            res.json({ 
+                success: true, 
+                message: 'Check-in successful! Enjoy your visit!',
+                data: result.ticket
+            });
+        } else {
+            res.status(400).json({ 
+                success: false, 
+                message: result.message 
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error in self check-in:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in km
+}
+
+// ============= END OF MARK AS USED ENDPOINTS =============
 
 // Verify ticket (public with rate limiting)
 router.post('/verify', verifyLimiter, async (req, res) => {
@@ -267,6 +425,47 @@ router.get('/stats/:userId', authMiddleware, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch ticket statistics'
+        });
+    }
+});
+// routes/ticketRoutes.js - Add this endpoint
+
+// Admin endpoint to manually process tickets (protected, admin only)
+router.post('/admin/process-tickets', authMiddleware, async (req, res) => {
+    try {
+        // Check if user is admin
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized. Admin access required.'
+            });
+        }
+        
+        console.log('🔧 Manually processing tickets...');
+        
+        // Process travel dates
+        const usedTickets = await Ticket.processTravelDates();
+        
+        // Process expired tickets
+        const expiredTickets = await Ticket.markExpiredTickets();
+        
+        res.json({
+            success: true,
+            message: 'Tickets processed successfully',
+            data: {
+                used_tickets: usedTickets.length,
+                expired_tickets: expiredTickets.length,
+                used_details: usedTickets,
+                expired_details: expiredTickets
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error processing tickets:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to process tickets',
+            error: error.message
         });
     }
 });
