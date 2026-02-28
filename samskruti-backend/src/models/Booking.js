@@ -12,11 +12,14 @@ static async create(bookingData) {
             travel_date,
             travelers,
             special_requests,
-            total_amount,
-            booking_reference
+            total_amount, // this is the final amount after discount
+            booking_reference,
+            pickup_point,
+            promo_code_id,   // new
+            discount_amount, // new
+            influencer_commission // new
         } = bookingData;
 
-        // Create booking
         const bookingQuery = `
             INSERT INTO bookings (
                 user_id,
@@ -27,11 +30,15 @@ static async create(bookingData) {
                 travelers,
                 special_requests,
                 total_amount,
+                pickup_point,
+                promo_code_id,
+                discount_amount,
+                influencer_commission,
                 status,
                 payment_status,
                 created_at,
                 updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed', 'paid', NOW(), NOW())
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', 'paid', NOW(), NOW())
             RETURNING *
         `;
 
@@ -43,40 +50,31 @@ static async create(bookingData) {
             travel_date,
             travelers,
             special_requests || null,
-            total_amount
+            total_amount,
+            pickup_point || null,
+            promo_code_id || null,
+            discount_amount || 0,
+            influencer_commission || 0
         ];
 
         const bookingResult = await db.query(bookingQuery, bookingValues);
         const booking = bookingResult.rows[0];
 
-        // Create ticket with travel date
         if (booking) {
-            try {
-                // Get site details
-                const siteQuery = await db.query(
-                    'SELECT name, location FROM heritage_sites WHERE id = $1',
-                    [site_id]
-                );
-                const site = siteQuery.rows[0] || { 
-                    name: 'Heritage Site', 
-                    location: 'Karnataka' 
-                };
-
-                // Create ticket with travel date
-                const ticket = await Ticket.create({
-                    booking_id: booking.id,
-                    user_id,
-                    site_id,
-                    site_name: site.name,
-                    site_location: site.location,
-                    travel_date // Pass travel_date to ticket
-                });
-
-                console.log(`✅ Ticket created for booking ${booking.id}: ${ticket.ticket_number} (Travel date: ${travel_date})`);
-
-            } catch (ticketError) {
-                console.error('Error creating ticket for booking:', ticketError);
-            }
+            const siteQuery = await db.query(
+                'SELECT name, location FROM heritage_sites WHERE id = $1',
+                [site_id]
+            );
+            const site = siteQuery.rows[0] || { name: 'Heritage Site', location: 'Karnataka' };
+            const ticket = await Ticket.create({
+                booking_id: booking.id,
+                user_id,
+                site_id,
+                site_name: site.name,
+                site_location: site.location,
+                travel_date
+            });
+            console.log(`✅ Ticket created for booking ${booking.id}: ${ticket.ticket_number}`);
         }
 
         return booking;

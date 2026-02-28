@@ -21,6 +21,7 @@ interface Booking {
   payment_status: string;
   created_at: string;
   special_requests?: string;
+  pickup_point?: string | null;  // new field
 }
 
 export default function EnterpriseBookingsPage() {
@@ -324,6 +325,7 @@ export default function EnterpriseBookingsPage() {
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Customer</th>
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Travel Date</th>
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Travelers</th>
+                    <th className="px-4 py-3 text-left text-xs text-gray-400">Pickup Point</th> {/* NEW COLUMN */}
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Amount</th>
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Status</th>
                     <th className="px-4 py-3 text-left text-xs text-gray-400">Payment</th>
@@ -363,6 +365,11 @@ export default function EnterpriseBookingsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-gray-300 text-sm">{booking.travelers}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-gray-300 text-sm">
+                          {booking.pickup_point || 'N/A'}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-emerald-400 text-sm font-medium">

@@ -21,13 +21,14 @@ const Icons = {
   Mail: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
   Calendar: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
   Star: () => <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>,
+  Plus: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
 };
 
 export default function MessagesPage() {
   const { isDarkMode } = useTheme();
   const { user, isLoading } = useUser();
   const router = useRouter();
-  
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -45,7 +46,13 @@ export default function MessagesPage() {
     memberSince: '',
     lastActive: ''
   });
-  
+
+  // New state for enterprise list modal
+  const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [enterprises, setEnterprises] = useState<any[]>([]);
+  const [loadingEnterprises, setLoadingEnterprises] = useState(false);
+  const [enterpriseSearch, setEnterpriseSearch] = useState('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,8 +63,7 @@ export default function MessagesPage() {
       router.replace('/auth');
       return;
     }
-    
-    // Check user role (you can determine this from user object)
+
     setUserRole(user.role === 'enterprise' ? 'enterprise' : 'user');
     fetchConversations();
   }, [user, isLoading, router]);
@@ -66,7 +72,7 @@ export default function MessagesPage() {
   useEffect(() => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      const filtered = conversations.filter(conv => 
+      const filtered = conversations.filter(conv =>
         conv.enterprise_name?.toLowerCase().includes(query) ||
         conv.site_name?.toLowerCase().includes(query) ||
         conv.subject?.toLowerCase().includes(query) ||
@@ -87,39 +93,38 @@ export default function MessagesPage() {
   // Fetch tourist stats when conversation selected
   useEffect(() => {
     if (selectedConversation && userRole === 'enterprise') {
-      // Fetch tourist stats
       fetchTouristStats(selectedConversation.user_id);
     }
   }, [selectedConversation, userRole]);
 
   const fetchConversations = async () => {
-  setLoading(true);
-  try {
-    console.log('Fetching conversations...');
-    console.log('User role:', userRole);
-    
-    let data;
-    if (userRole === 'enterprise') {
-      console.log('Fetching enterprise conversations...');
-      data = await messageService.getEnterpriseConversations();
-    } else {
-      console.log('Fetching user conversations...');
-      data = await messageService.getUserConversations();
+    setLoading(true);
+    try {
+      console.log('Fetching conversations...');
+      console.log('User role:', userRole);
+
+      let data;
+      if (userRole === 'enterprise') {
+        console.log('Fetching enterprise conversations...');
+        data = await messageService.getEnterpriseConversations();
+      } else {
+        console.log('Fetching user conversations...');
+        data = await messageService.getUserConversations();
+      }
+
+      console.log('Conversations data received:', data);
+      setConversations(data);
+      setFilteredConversations(data);
+
+      if (data.length === 0) {
+        console.log('No conversations found');
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    console.log('Conversations data received:', data);
-    setConversations(data);
-    setFilteredConversations(data);
-    
-    if (data.length === 0) {
-      console.log('No conversations found');
-    }
-  } catch (error) {
-    console.error('Error fetching conversations:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const fetchTouristStats = async (userId: number) => {
     try {
@@ -141,7 +146,7 @@ export default function MessagesPage() {
     try {
       const data = await messageService.getMessages(conversationId);
       setMessages(data);
-      
+
       // Mark as read
       if (userRole === 'enterprise') {
         await messageService.markEnterpriseAsRead(conversationId);
@@ -180,10 +185,10 @@ export default function MessagesPage() {
       if (sentMessage) {
         setMessages(prev => [...prev, sentMessage]);
         setNewMessage('');
-        
+
         // Update conversation list with new last message
-        setConversations(prev => 
-          prev.map(conv => 
+        setConversations(prev =>
+          prev.map(conv =>
             conv.id === selectedConversation.id
               ? { ...conv, last_message: newMessage, last_message_at: new Date().toISOString() }
               : conv
@@ -213,6 +218,59 @@ export default function MessagesPage() {
     return messageService.formatMessageTime(timestamp);
   };
 
+  // New functions for enterprise modal
+  const fetchEnterprises = async () => {
+    setLoadingEnterprises(true);
+    try {
+      const data = await messageService.getAllEnterprises();
+      setEnterprises(data);
+    } catch (error) {
+      console.error('Error fetching enterprises:', error);
+    } finally {
+      setLoadingEnterprises(false);
+    }
+  };
+
+  const handleOpenNewMessage = () => {
+    fetchEnterprises();
+    setShowNewMessageModal(true);
+  };
+
+  const handleStartConversation = async (enterpriseId: number, enterpriseName: string) => {
+    try {
+      const conversation = await messageService.startConversation(
+        enterpriseId,
+        null,
+        `Inquiry about ${enterpriseName}`
+      );
+      if (conversation) {
+        setShowNewMessageModal(false);
+        // Refresh conversations and select the new one
+        await fetchConversations();
+        // Find the new conversation in the updated list
+        const newConv = conversations.find(c => c.id === conversation.id);
+        if (newConv) {
+          handleSelectConversation(newConv);
+        } else {
+          // If not found, maybe just fetch again or navigate
+          // For simplicity, we'll just select the first conversation? Better to wait for state update
+          // We can set a timeout to find after state updates
+          setTimeout(() => {
+            const updatedConv = conversations.find(c => c.id === conversation.id);
+            if (updatedConv) handleSelectConversation(updatedConv);
+          }, 500);
+        }
+      }
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+    }
+  };
+
+  const filteredEnterprises = enterprises.filter(e =>
+    e.enterprise_name?.toLowerCase().includes(enterpriseSearch.toLowerCase()) ||
+    e.description?.toLowerCase().includes(enterpriseSearch.toLowerCase())
+  );
+
   if (isLoading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${
@@ -232,11 +290,11 @@ export default function MessagesPage() {
 
   return (
     <div className={`min-h-screen font-sans ${
-      isDarkMode 
-        ? "bg-gradient-to-br from-gray-900 via-gray-900 to-gray-950 text-white" 
+      isDarkMode
+        ? "bg-gradient-to-br from-gray-900 via-gray-900 to-gray-950 text-white"
         : "bg-gradient-to-br from-gray-50 via-white to-gray-50 text-gray-900"
     }`}>
-      
+
       {/* Header */}
       <header className={`fixed top-0 right-0 left-0 z-40 h-16 border-b backdrop-blur-md ${
         isDarkMode ? "border-gray-800/50 bg-gray-900/50" : "border-gray-200/50 bg-white/50"
@@ -270,16 +328,29 @@ export default function MessagesPage() {
               }
             </h1>
           </div>
-          {selectedConversation && !showMobileList && userRole === 'enterprise' && (
-            <button
-              onClick={() => setShowTouristDetails(!showTouristDetails)}
-              className={`p-2 rounded-lg transition-colors ${
-                isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
-              }`}
-            >
-              <Icons.User />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {selectedConversation && !showMobileList && userRole === 'enterprise' && (
+              <button
+                onClick={() => setShowTouristDetails(!showTouristDetails)}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                }`}
+              >
+                <Icons.User />
+              </button>
+            )}
+            {userRole !== 'enterprise' && (
+              <button
+                onClick={handleOpenNewMessage}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                }`}
+                title="New message"
+              >
+                <Icons.Plus />
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -292,7 +363,7 @@ export default function MessagesPage() {
           } w-full md:w-80 border-r ${
             isDarkMode ? "border-gray-800" : "border-gray-200"
           } overflow-y-auto`}>
-            
+
             {/* Search Bar */}
             <div className="p-4">
               <div className="relative">
@@ -323,7 +394,7 @@ export default function MessagesPage() {
                 <div className="text-6xl mb-4 opacity-30">💬</div>
                 <h3 className="text-lg font-medium mb-2">No conversations yet</h3>
                 <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  {userRole === 'enterprise' 
+                  {userRole === 'enterprise'
                     ? "Tourists will contact you about heritage sites"
                     : "Start chatting with enterprises about heritage sites"}
                 </p>
@@ -358,7 +429,7 @@ export default function MessagesPage() {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
-                              {conv.user_name?.charAt(0).toUpperCase() || 
+                              {conv.user_name?.charAt(0).toUpperCase() ||
                                conv.user_email?.charAt(0).toUpperCase() || 'T'}
                             </div>
                           )
@@ -382,7 +453,7 @@ export default function MessagesPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <h3 className="font-medium truncate">
-                            {userRole === 'enterprise' 
+                            {userRole === 'enterprise'
                               ? (conv.user_name || conv.user_email || 'Tourist')
                               : conv.enterprise_name
                             }
@@ -393,13 +464,13 @@ export default function MessagesPage() {
                             </span>
                           )}
                         </div>
-                        
+
                         {conv.site_name && (
                           <p className={`text-xs mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
                             📍 {conv.site_name}
                           </p>
                         )}
-                        
+
                         {conv.last_message && (
                           <p className={`text-sm truncate ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
                             {conv.last_message}
@@ -424,7 +495,7 @@ export default function MessagesPage() {
           <div className={`${
             showMobileList ? 'hidden md:block' : 'block'
           } flex-1 flex flex-col relative`}>
-            
+
             {selectedConversation ? (
               <>
                 {/* Chat Header with Tourist Info (for enterprise view) */}
@@ -447,7 +518,7 @@ export default function MessagesPage() {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
-                              {selectedConversation.user_name?.charAt(0).toUpperCase() || 
+                              {selectedConversation.user_name?.charAt(0).toUpperCase() ||
                                selectedConversation.user_email?.charAt(0).toUpperCase() || 'T'}
                             </div>
                           )}
@@ -493,9 +564,9 @@ export default function MessagesPage() {
                   {messages.map((msg, index) => {
                     const isUser = (userRole === 'enterprise' && msg.sender_type === 'enterprise') ||
                                   (userRole === 'user' && msg.sender_type === 'user');
-                    const showAvatar = index === 0 || 
+                    const showAvatar = index === 0 ||
                       messages[index - 1]?.sender_type !== msg.sender_type;
-                    
+
                     return (
                       <div
                         key={msg.id}
@@ -517,7 +588,7 @@ export default function MessagesPage() {
                                   />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center text-white text-sm">
-                                    {selectedConversation.user_name?.charAt(0).toUpperCase() || 
+                                    {selectedConversation.user_name?.charAt(0).toUpperCase() ||
                                      selectedConversation.user_email?.charAt(0).toUpperCase() || 'T'}
                                   </div>
                                 )
@@ -538,7 +609,7 @@ export default function MessagesPage() {
                               )}
                             </div>
                           )}
-                          
+
                           <div>
                             <div
                               className={`p-3 rounded-2xl ${
@@ -649,6 +720,128 @@ export default function MessagesPage() {
           </div>
         </div>
       </main>
+
+      {/* New Message Modal */}
+      <AnimatePresence>
+        {showNewMessageModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowNewMessageModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className={`relative w-full max-w-2xl rounded-2xl ${
+                isDarkMode ? "bg-gray-900" : "bg-white"
+              } shadow-2xl`}
+            >
+              {/* Modal Header */}
+              <div className={`p-6 border-b ${isDarkMode ? "border-gray-800" : "border-gray-200"}`}>
+                <h2 className="text-2xl font-bold">New Message</h2>
+                <p className={`text-sm mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Select an enterprise to start a conversation
+                </p>
+              </div>
+
+              {/* Modal Search */}
+              <div className="p-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search enterprises..."
+                    value={enterpriseSearch}
+                    onChange={(e) => setEnterpriseSearch(e.target.value)}
+                    className={`w-full px-4 py-2 pl-10 rounded-lg text-sm border ${
+                      isDarkMode
+                        ? "bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+                        : "bg-white border-gray-200 text-gray-900 placeholder-gray-400"
+                    } focus:outline-none focus:ring-2 focus:ring-emerald-500/50`}
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Icons.Search />
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Content - Enterprise List */}
+              <div className="max-h-96 overflow-y-auto p-4">
+                {loadingEnterprises ? (
+                  <div className="flex justify-center py-8">
+                    <div className="w-8 h-8 border-2 border-emerald-200 border-t-emerald-500 rounded-full animate-spin"></div>
+                  </div>
+                ) : filteredEnterprises.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No enterprises found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredEnterprises.map((enterprise) => (
+                      <button
+                        key={enterprise.id}
+                        onClick={() => handleStartConversation(enterprise.id, enterprise.enterprise_name)}
+                        className={`w-full p-4 rounded-lg text-left transition-colors ${
+                          isDarkMode
+                            ? "hover:bg-gray-800"
+                            : "hover:bg-gray-100"
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gradient-to-r from-emerald-500 to-teal-500 flex-shrink-0">
+                            {enterprise.logo ? (
+                              <Image
+                                src={enterprise.logo}
+                                alt={enterprise.enterprise_name}
+                                fill
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-white font-bold text-lg">
+                                {enterprise.enterprise_name?.charAt(0) || 'E'}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{enterprise.enterprise_name}</h3>
+                            {enterprise.business_type && (
+                              <p className={`text-xs mt-0.5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                                {enterprise.business_type}
+                              </p>
+                            )}
+                            {enterprise.description && (
+                              <p className={`text-sm mt-1 line-clamp-2 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
+                                {enterprise.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className={`p-4 border-t ${isDarkMode ? "border-gray-800" : "border-gray-200"} flex justify-end`}>
+                <button
+                  onClick={() => setShowNewMessageModal(false)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border ${
+                    isDarkMode
+                      ? "border-gray-700 hover:bg-gray-800 text-gray-300"
+                      : "border-gray-200 hover:bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

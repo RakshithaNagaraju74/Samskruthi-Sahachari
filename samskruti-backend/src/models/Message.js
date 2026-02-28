@@ -311,7 +311,7 @@ class Message {
             // Get user profile
             const userQuery = `
                 SELECT u.id, u.email, u.created_at as joined_date,
-                       u.full_name, u.phone, u.profile_image
+                       u.full_name, u.phone
                 FROM users u
                 WHERE u.id = $1
             `;
@@ -341,8 +341,7 @@ class Message {
         } catch (error) {
             console.error('Error getting tourist details:', error);
             throw error;
-        }
-    }
+        }}
 
     // Get unread count for user
     static async getUnreadCountForUser(userId) {

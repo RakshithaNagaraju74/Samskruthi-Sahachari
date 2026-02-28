@@ -4,6 +4,7 @@ const db = require('../config/database');
 const { authMiddleware, authorize } = require('../middlewares/authMiddleware');
 const multer = require('multer');
 const path = require('path');
+const ExcelJS = require('exceljs');
 const fs = require('fs');
 
 // Debug endpoint
@@ -18,8 +19,28 @@ router.get('/debug', (req, res) => {
     });
 });
 
-// All enterprise routes require authentication and enterprise role
+// All enterprise routes require authentication (but not necessarily enterprise role)
 router.use(authMiddleware);
+
+// ========== PUBLIC (AUTHENTICATED) ROUTES ==========
+// Any authenticated user can list approved enterprises
+router.get('/all', async (req, res) => {
+    try {
+        const query = `
+            SELECT id, enterprise_name, description, business_type, location
+            FROM enterprises
+            WHERE verification_status = 'approved'
+            ORDER BY enterprise_name ASC
+        `;
+        const result = await db.query(query);
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Error fetching enterprises:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch enterprises' });
+    }
+});
+
+// ========== ENTERPRISE-ONLY ROUTES ==========
 router.use(authorize('enterprise'));
 
 // Configure multer for site image uploads
@@ -44,12 +65,8 @@ const upload = multer({
         const allowedTypes = /jpeg|jpg|png|webp/;
         const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
         const mimetype = allowedTypes.test(file.mimetype);
-        
-        if (mimetype && extname) {
-            return cb(null, true);
-        } else {
-            cb(new Error('Only image files are allowed'));
-        }
+        if (mimetype && extname) return cb(null, true);
+        else cb(new Error('Only image files are allowed'));
     }
 });
 
@@ -60,45 +77,38 @@ router.get('/dashboard/stats', async (req, res) => {
         console.log('📊 ===== START FETCHING ENTERPRISE DASHBOARD STATS =====');
         console.log('📊 User ID from token:', enterpriseId);
 
-        // Get enterprise profile to get enterprise_id
         const enterpriseQuery = await db.query(
             'SELECT id FROM enterprises WHERE user_id = $1',
             [enterpriseId]
         );
-        
         if (enterpriseQuery.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Enterprise profile not found'
-            });
+            return res.status(404).json({ success: false, message: 'Enterprise profile not found' });
         }
-        
         const enterpriseRecordId = enterpriseQuery.rows[0].id;
         console.log('✅ Found enterprise record ID:', enterpriseRecordId);
 
-        // Get total sites
+        // Total sites
         const totalSitesQuery = await db.query(
             'SELECT COUNT(*) FROM heritage_sites WHERE enterprise_id = $1',
             [enterpriseRecordId]
         );
         console.log('📊 Total sites result:', totalSitesQuery.rows[0]);
 
-        // Since there's no is_approved column, we'll use is_active and is_featured as indicators
-        // You might need to adjust this based on how you track approval in your system
+        // Active sites
         const approvedSitesQuery = await db.query(
             "SELECT COUNT(*) FROM heritage_sites WHERE enterprise_id = $1 AND is_active = true",
             [enterpriseRecordId]
         );
         console.log('📊 Active sites result:', approvedSitesQuery.rows[0]);
 
-        // Pending sites could be those that are not active or have some other status
+        // Inactive sites
         const pendingSitesQuery = await db.query(
             "SELECT COUNT(*) FROM heritage_sites WHERE enterprise_id = $1 AND (is_active = false OR is_active IS NULL)",
             [enterpriseRecordId]
         );
         console.log('📊 Inactive sites result:', pendingSitesQuery.rows[0]);
 
-        // Get total bookings for enterprise sites
+        // Total bookings
         let totalBookings = { count: 0, revenue: 0 };
         try {
             const totalBookingsQuery = await db.query(`
@@ -113,7 +123,7 @@ router.get('/dashboard/stats', async (req, res) => {
             console.log('📊 Bookings table might not exist:', bookingError.message);
         }
 
-        // Get monthly revenue for last 6 months
+        // Monthly revenue (last 6 months)
         let monthlyRevenue = [];
         try {
             const monthlyRevenueQuery = await db.query(`
@@ -134,7 +144,7 @@ router.get('/dashboard/stats', async (req, res) => {
             console.log('📊 Monthly revenue query failed:', bookingError.message);
         }
 
-        // Get recent bookings
+        // Recent bookings
         let recentBookings = [];
         try {
             const recentBookingsQuery = await db.query(`
@@ -160,7 +170,7 @@ router.get('/dashboard/stats', async (req, res) => {
             console.log('📊 Recent bookings query failed:', bookingError.message);
         }
 
-        // Get popular sites
+        // Popular sites
         let popularSites = [];
         try {
             const popularSitesQuery = await db.query(`
@@ -185,7 +195,7 @@ router.get('/dashboard/stats', async (req, res) => {
             console.log('📊 Popular sites query failed:', bookingError.message);
         }
 
-        // Get ticket usage stats
+        // Ticket stats
         let ticketStats = { total_tickets: 0, active_tickets: 0, used_tickets: 0, expired_tickets: 0 };
         try {
             const ticketStatsQuery = await db.query(`
@@ -204,8 +214,6 @@ router.get('/dashboard/stats', async (req, res) => {
             console.log('📊 Tickets table might not exist:', ticketError.message);
         }
 
-        console.log('📊 ===== SUCCESS: Preparing response =====');
-        
         const responseData = {
             sites: {
                 total: parseInt(totalSitesQuery.rows[0].count),
@@ -223,250 +231,68 @@ router.get('/dashboard/stats', async (req, res) => {
         };
 
         console.log('📊 Response data:', JSON.stringify(responseData, null, 2));
-
-        res.json({
-            success: true,
-            data: responseData
-        });
+        res.json({ success: true, data: responseData });
 
     } catch (error) {
         console.error('❌ Error fetching enterprise stats:', error);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Error position:', error.position);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch dashboard stats',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Failed to fetch dashboard stats', error: error.message });
     }
 });
 
 // ==================== SITE MANAGEMENT ====================
-
-// Get all sites for enterprise
-// Get all sites for enterprise - UPDATED with correct column names
-// Get all sites for enterprise - FIXED array parsing
-// Get all sites for enterprise
 router.get('/sites', async (req, res) => {
     try {
         const enterpriseId = req.user.id;
-        
-        // Get enterprise verification status
         const enterpriseQuery = await db.query(
             'SELECT id, verification_status FROM enterprises WHERE user_id = $1',
             [enterpriseId]
         );
-        
         if (enterpriseQuery.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Enterprise profile not found'
-            });
+            return res.status(404).json({ success: false, message: 'Enterprise profile not found' });
         }
-        
         const enterpriseRecordId = enterpriseQuery.rows[0].id;
         const verificationStatus = enterpriseQuery.rows[0].verification_status;
-        
         console.log('Enterprise verification status:', verificationStatus);
 
         const sitesQuery = await db.query(`
             SELECT 
-                id,
-                name,
-                location,
-                district,
-                state,
-                description,
-                short_description,
-                category,
-                subcategory,
-                site_type,
-                built_in,
-                built_by,
-                architectural_style,
-                significance,
-                entry_fee_indian,
-                entry_fee_foreigner,
-                opening_time,
-                closing_time,
-                best_time_to_visit,
-                duration_required,
-                contact_phone,
-                contact_email,
-                website,
-                main_image as image,
-                gallery_images,
-                is_active,
-                is_featured,
-                is_unesco,
-                rating,
-                total_reviews,
-                views,
-                tags,
-                highlights,
-                created_at
+                id, name, location, district, state, description, short_description,
+                category, subcategory, site_type, built_in, built_by, architectural_style, significance,
+                entry_fee_indian, entry_fee_foreigner, opening_time, closing_time,
+                best_time_to_visit, duration_required, contact_phone, contact_email, website,
+                main_image as image, gallery_images, is_active, is_featured, is_unesco,
+                rating, total_reviews, views, tags, highlights, created_at
             FROM heritage_sites
             WHERE enterprise_id = $1
             ORDER BY created_at DESC
         `, [enterpriseRecordId]);
 
-        // Parse array fields from PostgreSQL format to JavaScript arrays
         const sites = sitesQuery.rows.map(site => {
-            // Parse gallery_images
-            if (site.gallery_images) {
-                if (typeof site.gallery_images === 'string') {
-                    const arrayStr = site.gallery_images.substring(1, site.gallery_images.length - 1);
-                    site.gallery_images = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
-                }
-            } else {
-                site.gallery_images = [];
+            // Parse array fields from PostgreSQL format to JavaScript arrays
+            if (site.gallery_images && typeof site.gallery_images === 'string') {
+                const arrayStr = site.gallery_images.substring(1, site.gallery_images.length - 1);
+                site.gallery_images = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
             }
-
-            // Parse tags
-            if (site.tags) {
-                if (typeof site.tags === 'string') {
-                    const arrayStr = site.tags.substring(1, site.tags.length - 1);
-                    site.tags = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
-                }
-            } else {
-                site.tags = [];
+            if (site.tags && typeof site.tags === 'string') {
+                const arrayStr = site.tags.substring(1, site.tags.length - 1);
+                site.tags = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
             }
-
-            // Parse highlights
-            if (site.highlights) {
-                if (typeof site.highlights === 'string') {
-                    const arrayStr = site.highlights.substring(1, site.highlights.length - 1);
-                    site.highlights = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
-                }
-            } else {
-                site.highlights = [];
+            if (site.highlights && typeof site.highlights === 'string') {
+                const arrayStr = site.highlights.substring(1, site.highlights.length - 1);
+                site.highlights = arrayStr ? arrayStr.split(',').map(item => item.trim().replace(/^"|"$/g, '')) : [];
             }
-
             return site;
         });
 
-        res.json({
-            success: true,
-            data: sites,
-            enterprise_status: verificationStatus
-        });
+        res.json({ success: true, data: sites, enterprise_status: verificationStatus });
 
     } catch (error) {
         console.error('Error fetching sites:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch sites',
-            error: error.message
-        });
+        res.status(500).json({ success: false, message: 'Failed to fetch sites', error: error.message });
     }
 });
 
-// Get single site details
-// Get single site details - UPDATED with correct column names
-router.get('/sites/:siteId', async (req, res) => {
-    try {
-        const { siteId } = req.params;
-        const enterpriseId = req.user.id;
-        
-        const enterpriseQuery = await db.query(
-            'SELECT id FROM enterprises WHERE user_id = $1',
-            [enterpriseId]
-        );
-        
-        if (enterpriseQuery.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Enterprise profile not found'
-            });
-        }
-        
-        const enterpriseRecordId = enterpriseQuery.rows[0].id;
 
-        const siteQuery = await db.query(`
-            SELECT * FROM heritage_sites
-            WHERE id = $1 AND enterprise_id = $2
-        `, [siteId, enterpriseRecordId]);
-
-        if (siteQuery.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Site not found'
-            });
-        }
-
-        // Get bookings for this site
-        const bookingsQuery = await db.query(`
-            SELECT 
-                b.*,
-                u.email as user_email
-            FROM bookings b
-            JOIN users u ON b.user_id = u.id
-            WHERE b.site_id = $1
-            ORDER BY b.created_at DESC
-            LIMIT 20
-        `, [siteId]);
-
-        // Get reviews for this site
-        const reviewsQuery = await db.query(`
-            SELECT 
-                r.*,
-                u.email as user_email,
-                u.full_name
-            FROM reviews r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.site_id = $1
-            ORDER BY r.created_at DESC
-        `, [siteId]);
-
-        const site = siteQuery.rows[0];
-        
-        // Parse JSON fields
-        if (site.gallery_images && typeof site.gallery_images === 'string') {
-            try {
-                site.gallery_images = JSON.parse(site.gallery_images);
-            } catch (e) {
-                site.gallery_images = [];
-            }
-        }
-        if (site.tags && typeof site.tags === 'string') {
-            try {
-                site.tags = JSON.parse(site.tags);
-            } catch (e) {
-                site.tags = [];
-            }
-        }
-        if (site.highlights && typeof site.highlights === 'string') {
-            try {
-                site.highlights = JSON.parse(site.highlights);
-            } catch (e) {
-                site.highlights = [];
-            }
-        }
-
-        res.json({
-            success: true,
-            data: {
-                ...site,
-                bookings: bookingsQuery.rows,
-                reviews: reviewsQuery.rows
-            }
-        });
-
-    } catch (error) {
-        console.error('Error fetching site:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch site details',
-            error: error.message
-        });
-    }
-});
-
-// Create new site
-// Create new site - UPDATED with correct column names
-// Create new site - FIXED array formatting
-// Create new site - FIXED: Remove id from insert
-// Create new site - with automatic approval for verified enterprises
 router.post('/sites', upload.array('images', 10), async (req, res) => {
     const client = await db.pool.connect();
     
@@ -497,7 +323,6 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
         console.log('Enterprise verification status:', verificationStatus);
 
         // Determine if site should be auto-approved
-        // If enterprise is verified, sites are automatically approved
         const isAutoApproved = verificationStatus === 'approved';
         
         console.log('Auto approve site?', isAutoApproved);
@@ -526,7 +351,8 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
             contact_email,
             website,
             tags,
-            highlights
+            highlights,
+            pickup_points   // new field
         } = req.body;
 
         // Handle image uploads
@@ -539,7 +365,7 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
             imagesArray = '{' + images.map(img => `"${img.replace(/\\/g, '\\\\')}"`).join(',') + '}';
         }
 
-        // Parse JSON fields for tags and highlights
+        // Parse tags
         let tagsArray = '{}';
         if (tags) {
             try {
@@ -552,6 +378,7 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
             }
         }
 
+        // Parse highlights
         let highlightsArray = '{}';
         if (highlights) {
             try {
@@ -564,12 +391,25 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
             }
         }
 
+        // Parse pickup_points (new)
+        let pickupPointsArray = '{}';
+        if (pickup_points) {
+            try {
+                const parsed = typeof pickup_points === 'string' ? JSON.parse(pickup_points) : pickup_points;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    pickupPointsArray = '{' + parsed.map(p => `"${p}"`).join(',') + '}';
+                }
+            } catch (e) {
+                console.log('Error parsing pickup points:', e);
+            }
+        }
+
         console.log('Images array:', imagesArray);
         console.log('Tags array:', tagsArray);
         console.log('Highlights array:', highlightsArray);
+        console.log('Pickup points array:', pickupPointsArray);
 
         // For verified enterprises, sites are active immediately
-        // For unverified enterprises, sites need approval
         const isActive = isAutoApproved ? true : false;
 
         const insertQuery = await client.query(`
@@ -601,13 +441,14 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
                 gallery_images,
                 tags,
                 highlights,
+                pickup_points,
                 is_active,
                 views,
                 rating,
                 total_reviews,
                 created_at,
                 updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::text[], $26::text[], $27::text[], $28, $29, $30, $31, NOW(), NOW())
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::text[], $26::text[], $27::text[], $28::text[], $29, $30, $31, $32, NOW(), NOW())
             RETURNING id
         `, [
             enterpriseRecordId,
@@ -637,13 +478,75 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
             imagesArray,
             tagsArray,
             highlightsArray,
-            isActive, // Use the calculated value
+            pickupPointsArray,   // new value
+            isActive,
             0, // views
             0, // rating
-            0 // total_reviews
+            0  // total_reviews
         ]);
 
         await client.query('COMMIT');
+
+        // --- Generate Excel file ---
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('New Site');
+
+            // Define columns
+            worksheet.columns = [
+                { header: 'Field', key: 'field', width: 25 },
+                { header: 'Value', key: 'value', width: 50 },
+            ];
+
+            // Prepare site data (use the variables already available)
+            const siteData = [
+                { field: 'Site ID', value: insertQuery.rows[0].id },
+                { field: 'Name', value: name },
+                { field: 'Location', value: location },
+                { field: 'District', value: district },
+                { field: 'State', value: state },
+                { field: 'Description', value: description },
+                { field: 'Short Description', value: short_description },
+                { field: 'Category', value: category },
+                { field: 'Subcategory', value: subcategory },
+                { field: 'Site Type', value: site_type },
+                { field: 'Built In', value: built_in },
+                { field: 'Built By', value: built_by },
+                { field: 'Architectural Style', value: architectural_style },
+                { field: 'Significance', value: significance },
+                { field: 'Entry Fee (Indian)', value: entry_fee_indian },
+                { field: 'Entry Fee (Foreigner)', value: entry_fee_foreigner },
+                { field: 'Opening Time', value: opening_time },
+                { field: 'Closing Time', value: closing_time },
+                { field: 'Best Time to Visit', value: best_time_to_visit },
+                { field: 'Duration Required', value: duration_required },
+                { field: 'Contact Phone', value: contact_phone },
+                { field: 'Contact Email', value: contact_email },
+                { field: 'Website', value: website },
+                { field: 'Tags', value: tags ? JSON.stringify(tags) : '' },
+                { field: 'Highlights', value: highlights ? JSON.stringify(highlights) : '' },
+                { field: 'Pickup Points', value: pickup_points ? JSON.stringify(pickup_points) : '' },
+                { field: 'Main Image', value: mainImage },
+                { field: 'Gallery Images', value: images.length ? images.join(', ') : '' },
+                { field: 'Created At', value: new Date().toISOString() },
+            ];
+
+            worksheet.addRows(siteData);
+
+            // Define export folder and file name
+            const exportDir = path.join(__dirname, '../exports/sites');
+            if (!fs.existsSync(exportDir)) {
+                fs.mkdirSync(exportDir, { recursive: true });
+            }
+            const fileName = `site_${insertQuery.rows[0].id}_${Date.now()}.xlsx`;
+            const filePath = path.join(exportDir, fileName);
+
+            await workbook.xlsx.writeFile(filePath);
+            console.log(`✅ Excel file saved: ${filePath}`);
+        } catch (excelError) {
+            console.error('Error generating Excel file:', excelError);
+            // Do not fail the request if Excel generation fails
+        }
 
         const message = isAutoApproved 
             ? 'Site created successfully and is now live!' 
@@ -672,18 +575,18 @@ router.post('/sites', upload.array('images', 10), async (req, res) => {
     }
 });
 
-// Update site
-router.put('/sites/:siteId', upload.array('images', 10), async (req, res) => {
+router.post('/sites', upload.array('images', 10), async (req, res) => {
     const client = await db.pool.connect();
     
     try {
         await client.query('BEGIN');
         
-        const { siteId } = req.params;
         const enterpriseId = req.user.id;
+        console.log('Creating site for enterprise user:', enterpriseId);
         
+        // Get enterprise profile details including verification status
         const enterpriseQuery = await client.query(
-            'SELECT id FROM enterprises WHERE user_id = $1',
+            'SELECT id, verification_status FROM enterprises WHERE user_id = $1',
             [enterpriseId]
         );
         
@@ -696,155 +599,383 @@ router.put('/sites/:siteId', upload.array('images', 10), async (req, res) => {
         }
         
         const enterpriseRecordId = enterpriseQuery.rows[0].id;
+        const verificationStatus = enterpriseQuery.rows[0].verification_status;
+        
+        console.log('Enterprise record ID:', enterpriseRecordId);
+        console.log('Enterprise verification status:', verificationStatus);
 
-        // Check if site exists and belongs to enterprise
-        const siteCheck = await client.query(
-            'SELECT * FROM heritage_sites WHERE id = $1 AND enterprise_id = $2',
-            [siteId, enterpriseRecordId]
-        );
-
-        if (siteCheck.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({
-                success: false,
-                message: 'Site not found or you do not have permission'
-            });
-        }
-
-        const existingSite = siteCheck.rows[0];
+        // Determine if site should be auto-approved
+        const isAutoApproved = verificationStatus === 'approved';
+        
+        console.log('Auto approve site?', isAutoApproved);
 
         const {
             name,
             location,
+            district,
             state,
             description,
             short_description,
             category,
             subcategory,
-            price,
-            entry_fee,
-            duration,
-            best_time,
-            latitude,
-            longitude,
-            tags,
-            highlights,
-            open_timing,
-            closed_on,
-            contact_phone,
-            contact_email,
-            website
-        } = req.body;
-
-        // Handle image uploads
-        let images = existingSite.images;
-        if (existingSite.images) {
-            if (typeof existingSite.images === 'string') {
-                try {
-                    images = JSON.parse(existingSite.images);
-                } catch (e) {
-                    images = [];
-                }
-            } else if (Array.isArray(existingSite.images)) {
-                images = existingSite.images;
-            }
-        } else {
-            images = [];
-        }
-
-        if (req.files && req.files.length > 0) {
-            const newImages = req.files.map(file => file.path);
-            images = [...images, ...newImages];
-        }
-
-        const mainImage = req.files && req.files.length > 0 ? req.files[0].path : existingSite.image;
-
-        // Parse JSON fields
-        let tagsArray = existingSite.tags;
-        if (tags) {
-            try {
-                tagsArray = typeof tags === 'string' ? JSON.parse(tags) : tags;
-            } catch (e) {
-                tagsArray = existingSite.tags || [];
-            }
-        }
-
-        let highlightsArray = existingSite.highlights;
-        if (highlights) {
-            try {
-                highlightsArray = typeof highlights === 'string' ? JSON.parse(highlights) : highlights;
-            } catch (e) {
-                highlightsArray = existingSite.highlights || [];
-            }
-        }
-
-        await client.query(`
-            UPDATE heritage_sites SET
-                name = COALESCE($1, name),
-                location = COALESCE($2, location),
-                state = COALESCE($3, state),
-                description = COALESCE($4, description),
-                short_description = COALESCE($5, short_description),
-                category = COALESCE($6, category),
-                subcategory = COALESCE($7, subcategory),
-                price = COALESCE($8, price),
-                entry_fee = COALESCE($9, entry_fee),
-                duration = COALESCE($10, duration),
-                best_time = COALESCE($11, best_time),
-                latitude = COALESCE($12, latitude),
-                longitude = COALESCE($13, longitude),
-                image = COALESCE($14, image),
-                images = $15,
-                tags = $16,
-                highlights = $17,
-                open_timing = COALESCE($18, open_timing),
-                closed_on = COALESCE($19, closed_on),
-                contact_phone = COALESCE($20, contact_phone),
-                contact_email = COALESCE($21, contact_email),
-                website = COALESCE($22, website),
-                updated_at = NOW()
-            WHERE id = $23
-        `, [
-            name,
-            location,
-            state,
-            description,
-            short_description,
-            category,
-            subcategory,
-            price,
-            entry_fee,
-            duration,
-            best_time,
-            latitude,
-            longitude,
-            mainImage,
-            JSON.stringify(images),
-            JSON.stringify(tagsArray),
-            JSON.stringify(highlightsArray),
-            open_timing,
-            closed_on,
+            site_type,
+            built_in,
+            built_by,
+            architectural_style,
+            significance,
+            entry_fee_indian,
+            entry_fee_foreigner,
+            opening_time,
+            closing_time,
+            best_time_to_visit,
+            duration_required,
             contact_phone,
             contact_email,
             website,
-            siteId
+            tags,
+            highlights,
+            pickup_points   // new field
+        } = req.body;
+
+        // Handle image uploads
+        const images = req.files ? req.files.map(file => file.path) : [];
+        const mainImage = images.length > 0 ? images[0] : null;
+
+        // Format images as PostgreSQL array literal
+        let imagesArray = '{}';
+        if (images.length > 0) {
+            imagesArray = '{' + images.map(img => `"${img.replace(/\\/g, '\\\\')}"`).join(',') + '}';
+        }
+
+        // Parse tags
+        let tagsArray = '{}';
+        if (tags) {
+            try {
+                const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
+                if (Array.isArray(parsedTags) && parsedTags.length > 0) {
+                    tagsArray = '{' + parsedTags.map(tag => `"${tag}"`).join(',') + '}';
+                }
+            } catch (e) {
+                console.log('Error parsing tags:', e);
+            }
+        }
+
+        // Parse highlights
+        let highlightsArray = '{}';
+        if (highlights) {
+            try {
+                const parsedHighlights = typeof highlights === 'string' ? JSON.parse(highlights) : highlights;
+                if (Array.isArray(parsedHighlights) && parsedHighlights.length > 0) {
+                    highlightsArray = '{' + parsedHighlights.map(h => `"${h}"`).join(',') + '}';
+                }
+            } catch (e) {
+                console.log('Error parsing highlights:', e);
+            }
+        }
+
+        // Parse pickup_points (new)
+        let pickupPointsArray = '{}';
+        if (pickup_points) {
+            try {
+                const parsed = typeof pickup_points === 'string' ? JSON.parse(pickup_points) : pickup_points;
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    pickupPointsArray = '{' + parsed.map(p => `"${p}"`).join(',') + '}';
+                }
+            } catch (e) {
+                console.log('Error parsing pickup points:', e);
+            }
+        }
+
+        console.log('Images array:', imagesArray);
+        console.log('Tags array:', tagsArray);
+        console.log('Highlights array:', highlightsArray);
+        console.log('Pickup points array:', pickupPointsArray);
+
+        // For verified enterprises, sites are active immediately
+        const isActive = isAutoApproved ? true : false;
+
+        const insertQuery = await client.query(`
+            INSERT INTO heritage_sites (
+                enterprise_id,
+                name,
+                location,
+                district,
+                state,
+                description,
+                short_description,
+                category,
+                subcategory,
+                site_type,
+                built_in,
+                built_by,
+                architectural_style,
+                significance,
+                entry_fee_indian,
+                entry_fee_foreigner,
+                opening_time,
+                closing_time,
+                best_time_to_visit,
+                duration_required,
+                contact_phone,
+                contact_email,
+                website,
+                main_image,
+                gallery_images,
+                tags,
+                highlights,
+                pickup_points,
+                is_active,
+                views,
+                rating,
+                total_reviews,
+                created_at,
+                updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25::text[], $26::text[], $27::text[], $28::text[], $29, $30, $31, $32, NOW(), NOW())
+            RETURNING id
+        `, [
+            enterpriseRecordId,
+            name,
+            location || null,
+            district || null,
+            state || null,
+            description || null,
+            short_description || null,
+            category || null,
+            subcategory || null,
+            site_type || null,
+            built_in || null,
+            built_by || null,
+            architectural_style || null,
+            significance || null,
+            entry_fee_indian ? parseFloat(entry_fee_indian) : null,
+            entry_fee_foreigner ? parseFloat(entry_fee_foreigner) : null,
+            opening_time || null,
+            closing_time || null,
+            best_time_to_visit || null,
+            duration_required || null,
+            contact_phone || null,
+            contact_email || null,
+            website || null,
+            mainImage,
+            imagesArray,
+            tagsArray,
+            highlightsArray,
+            pickupPointsArray,   // new value
+            isActive,
+            0, // views
+            0, // rating
+            0  // total_reviews
         ]);
 
         await client.query('COMMIT');
+        
 
-        res.json({
+        const message = isAutoApproved 
+            ? 'Site created successfully and is now live!' 
+            : 'Site created successfully. Waiting for admin approval.';
+
+        res.status(201).json({
             success: true,
-            message: 'Site updated successfully'
+            message,
+            data: {
+                id: insertQuery.rows[0].id,
+                name,
+                is_active: isActive
+            }
         });
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error updating site:', error);
+        console.error('Error creating site:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to update site',
+            message: 'Failed to create site',
             error: error.message
         });
+    } finally {
+        client.release();
+    }
+});
+
+router.put('/sites/:siteId', upload.array('images', 10), async (req, res) => {
+    const client = await db.pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { siteId } = req.params;
+        const enterpriseId = req.user.id;
+
+        // Get enterprise record id
+        const enterpriseRes = await client.query(
+            'SELECT id FROM enterprises WHERE user_id = $1',
+            [enterpriseId]
+        );
+        if (enterpriseRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Enterprise profile not found' });
+        }
+        const enterpriseRecordId = enterpriseRes.rows[0].id;
+
+        // Verify site belongs to this enterprise
+        const siteCheck = await client.query(
+            'SELECT * FROM heritage_sites WHERE id = $1 AND enterprise_id = $2',
+            [siteId, enterpriseRecordId]
+        );
+        if (siteCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Site not found or access denied' });
+        }
+        const existingSite = siteCheck.rows[0];
+
+        // Extract all fields from request body
+        const {
+            name,
+            location,
+            district,
+            state,
+            description,
+            short_description,
+            category,
+            subcategory,
+            site_type,
+            built_in,
+            built_by,
+            architectural_style,
+            significance,
+            entry_fee_indian,
+            entry_fee_foreigner,
+            opening_time,
+            closing_time,
+            best_time_to_visit,
+            duration_required,
+            contact_phone,
+            contact_email,
+            website,
+            tags,
+            highlights,
+            pickup_points
+        } = req.body;
+
+        // --- Handle gallery images ---
+        let galleryImages = existingSite.gallery_images || [];
+        // If gallery_images is a PostgreSQL array string, parse it
+        if (typeof galleryImages === 'string') {
+            const cleaned = galleryImages.slice(1, -1);
+            galleryImages = cleaned ? cleaned.split(',').map(s => s.trim().replace(/^"|"$/g, '')) : [];
+        }
+
+        // Add newly uploaded images (convert backslashes to forward slashes)
+        if (req.files && req.files.length > 0) {
+            const newPaths = req.files.map(file => file.path.replace(/\\/g, '/'));
+            galleryImages = [...galleryImages, ...newPaths];
+        }
+
+        // Main image: keep existing unless new images were uploaded (first new image becomes main)
+        let mainImage = existingSite.main_image;
+        if (req.files && req.files.length > 0) {
+            mainImage = req.files[0].path.replace(/\\/g, '/');
+        }
+
+        // --- Helper to convert JavaScript array to PostgreSQL array literal ---
+        const toPgArray = (arr) => {
+            if (!arr || !Array.isArray(arr) || arr.length === 0) return '{}';
+            return '{' + arr.map(item => `"${item.replace(/"/g, '\\"')}"`).join(',') + '}';
+        };
+
+        // --- Parse tags, highlights, pickup_points (they come as JSON strings) ---
+        let tagsArray = existingSite.tags || [];
+        if (tags) {
+            try {
+                tagsArray = typeof tags === 'string' ? JSON.parse(tags) : tags;
+            } catch (e) { /* keep existing */ }
+        }
+
+        let highlightsArray = existingSite.highlights || [];
+        if (highlights) {
+            try {
+                highlightsArray = typeof highlights === 'string' ? JSON.parse(highlights) : highlights;
+            } catch (e) { /* keep existing */ }
+        }
+
+        let pickupPointsArray = existingSite.pickup_points || [];
+        if (pickup_points) {
+            try {
+                pickupPointsArray = typeof pickup_points === 'string' ? JSON.parse(pickup_points) : pickup_points;
+            } catch (e) {
+                pickupPointsArray = []; // fallback to empty array if parsing fails
+            }
+        }
+
+        // --- Perform the update ---
+        await client.query(`
+            UPDATE heritage_sites SET
+                name = COALESCE($1, name),
+                location = COALESCE($2, location),
+                district = COALESCE($3, district),
+                state = COALESCE($4, state),
+                description = COALESCE($5, description),
+                short_description = COALESCE($6, short_description),
+                category = COALESCE($7, category),
+                subcategory = COALESCE($8, subcategory),
+                site_type = COALESCE($9, site_type),
+                built_in = COALESCE($10, built_in),
+                built_by = COALESCE($11, built_by),
+                architectural_style = COALESCE($12, architectural_style),
+                significance = COALESCE($13, significance),
+                entry_fee_indian = COALESCE($14, entry_fee_indian),
+                entry_fee_foreigner = COALESCE($15, entry_fee_foreigner),
+                opening_time = COALESCE($16, opening_time),
+                closing_time = COALESCE($17, closing_time),
+                best_time_to_visit = COALESCE($18, best_time_to_visit),
+                duration_required = COALESCE($19, duration_required),
+                contact_phone = COALESCE($20, contact_phone),
+                contact_email = COALESCE($21, contact_email),
+                website = COALESCE($22, website),
+                main_image = COALESCE($23, main_image),
+                gallery_images = $24::text[],
+                tags = $25::text[],
+                highlights = $26::text[],
+                pickup_points = $27::text[],
+                updated_at = NOW()
+            WHERE id = $28
+        `, [
+            name || null,
+            location || null,
+            district || null,
+            state || null,
+            description || null,
+            short_description || null,
+            category || null,
+            subcategory || null,
+            site_type || null,
+            built_in || null,
+            built_by || null,
+            architectural_style || null,
+            significance || null,
+            entry_fee_indian ? parseFloat(entry_fee_indian) : null,
+            entry_fee_foreigner ? parseFloat(entry_fee_foreigner) : null,
+            opening_time || null,
+            closing_time || null,
+            best_time_to_visit || null,
+            duration_required || null,
+            contact_phone || null,
+            contact_email || null,
+            website || null,
+            mainImage,
+            toPgArray(galleryImages),
+            toPgArray(tagsArray),
+            toPgArray(highlightsArray),
+            toPgArray(pickupPointsArray),
+            siteId
+        ]);
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Site updated successfully' });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error updating site:', error);
+        res.status(500).json({ success: false, message: 'Failed to update site', error: error.message });
     } finally {
         client.release();
     }
@@ -944,8 +1075,6 @@ router.delete('/sites/:siteId/images', async (req, res) => {
 });
 
 // ==================== BOOKINGS MANAGEMENT ====================
-
-// Get all bookings for enterprise
 router.get('/bookings', async (req, res) => {
     try {
         const enterpriseId = req.user.id;
@@ -1034,7 +1163,6 @@ router.get('/bookings', async (req, res) => {
     }
 });
 
-// Get booking details
 router.get('/bookings/:bookingId', async (req, res) => {
     try {
         const { bookingId } = req.params;
@@ -1095,7 +1223,6 @@ router.get('/bookings/:bookingId', async (req, res) => {
     }
 });
 
-// Update booking status
 router.patch('/bookings/:bookingId/status', async (req, res) => {
     const client = await db.pool.connect();
     
@@ -1162,8 +1289,6 @@ router.patch('/bookings/:bookingId/status', async (req, res) => {
 });
 
 // ==================== ANALYTICS ====================
-
-// Get detailed analytics
 router.get('/analytics', async (req, res) => {
     try {
         const enterpriseId = req.user.id;
@@ -1286,7 +1411,7 @@ router.get('/analytics', async (req, res) => {
     }
 });
 
-// Get enterprise profile
+// ==================== PROFILE ====================
 router.get('/profile', async (req, res) => {
     try {
         const enterpriseId = req.user.id;
@@ -1352,7 +1477,6 @@ router.get('/profile', async (req, res) => {
     }
 });
 
-// Update enterprise profile
 router.put('/profile', async (req, res) => {
     try {
         const enterpriseId = req.user.id;

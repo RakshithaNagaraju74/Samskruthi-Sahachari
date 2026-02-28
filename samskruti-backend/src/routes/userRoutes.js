@@ -1,6 +1,7 @@
 // routes/userRoutes.js
 const express = require('express');
 const router = express.Router();
+const db = require('../config/database'); // 👈 ADD THIS LINE
 const { authMiddleware } = require('../middlewares/authMiddleware');
 const User = require('../models/User');
 const UserProfile = require('../models/UserProfile');
@@ -174,9 +175,6 @@ router.get('/wishlist', authMiddleware, async (req, res) => {
 });
 
 // Add to wishlist
-// backend/src/routes/userRoutes.js
-
-// Add to wishlist
 router.post('/wishlist/:siteId', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -248,9 +246,6 @@ router.delete('/wishlist/:siteId', authMiddleware, async (req, res) => {
 });
 
 // Get wishlist
-// routes/userRoutes.js - Update the wishlist endpoints
-
-// Get wishlist
 router.get('/wishlist', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -304,6 +299,7 @@ router.get('/wishlist/check/:siteId', authMiddleware, async (req, res) => {
     });
   }
 });
+
 router.get('/users/:id/stats', async (req, res) => {
   try {
     const { id } = req.params;
@@ -330,53 +326,50 @@ router.get('/users/:id/stats', async (req, res) => {
     res.status(500).json({ success: false });
   }
 });
-// Check if site is in wishlist
-router.get('/wishlist/check/:siteId', authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const siteId = parseInt(req.params.siteId);
-    
-    const result = await User.checkWishlist(userId, siteId);
-    
-    if (result.success) {
-      res.json({
-        success: true,
-        inWishlist: result.inWishlist
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: result.error
-      });
+
+// GET /api/user/preferences
+router.get('/preferences', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await db.query(
+            'SELECT preferred_categories FROM user_preferences WHERE user_id = $1',
+            [userId]
+        );
+        if (result.rows.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+        res.json({ success: true, data: result.rows[0].preferred_categories });
+    } catch (error) {
+        console.error('Error fetching preferences:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch preferences' });
     }
-  } catch (error) {
-    console.error('Error checking wishlist:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
 });
 
-// Remove from wishlist
-router.delete('/wishlist/:siteId', authMiddleware, async (req, res) => {
+// POST /api/user/preferences
+router.post('/preferences', authMiddleware, async (req, res) => {
     try {
-        const { siteId } = req.params;
-        
-        await User.removeFromWishlist(req.user.id, siteId);
-        
-        res.json({
-            success: true,
-            message: 'Removed from wishlist'
-        });
+        const userId = req.user.id;
+        const { categories } = req.body; // array of strings, e.g. ['heritage', 'nature']
+        if (!Array.isArray(categories)) {
+            return res.status(400).json({ success: false, message: 'Categories must be an array' });
+        }
+        const result = await db.query(
+            `INSERT INTO user_preferences (user_id, preferred_categories, created_at, updated_at)
+             VALUES ($1, $2, NOW(), NOW())
+             ON CONFLICT (user_id) 
+             DO UPDATE SET preferred_categories = $2, updated_at = NOW()
+             RETURNING preferred_categories`,
+            [userId, categories]
+        );
+        res.json({ success: true, data: result.rows[0].preferred_categories });
     } catch (error) {
-        console.error('Error removing from wishlist:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error removing from wishlist'
-        });
+        console.error('Error saving preferences:', error);
+        res.status(500).json({ success: false, message: 'Failed to save preferences' });
     }
 });
+
+// Remove from wishlist (duplicate – keeping the one above)
+// router.delete('/wishlist/:siteId', authMiddleware, async (req, res) => { ... });
 
 // Get user's visited sites
 router.get('/visits', authMiddleware, async (req, res) => {

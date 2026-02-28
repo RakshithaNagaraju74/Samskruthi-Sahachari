@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useUser } from "@/context/UserContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { heritageService, HeritageSite, Review } from "@/services/heritageService";
+import { heritageService, HeritageSite, Review, SiteProduct } from "@/services/heritageService"; // added SiteProduct
 import { bookingService } from "@/services/bookingService";
 import { userService } from "@/services/userService";
 import { messageService } from "@/services/messageService";
@@ -17,7 +17,7 @@ interface PageProps {
   }>;
 }
 
-// Icons
+// Icons (same as before)
 const Icons = {
   Back: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>,
   Calendar: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
@@ -49,10 +49,28 @@ export default function HeritageDetailPage({ params }: PageProps) {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   
+  // NEW: products state
+  const [products, setProducts] = useState<SiteProduct[]>([]);
+  const [selectedItems, setSelectedItems] = useState<{ product_id: number; quantity: number; name: string; price: number }[]>([]);
+  
+  // Promo code states
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{
+    id: number;
+    code: string;
+    discount_type: 'percentage' | 'fixed';
+    discount_value: number;
+    commission_rate: number;
+  } | null>(null);
+  const [validatingPromo, setValidatingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
+  
+  // Updated bookingData to include pickupPoint
   const [bookingData, setBookingData] = useState({
     travelDate: '',
     travelers: 1,
-    specialRequests: ''
+    specialRequests: '',
+    pickupPoint: ''  // new field
   });
   
   const [reviewData, setReviewData] = useState({
@@ -68,9 +86,88 @@ export default function HeritageDetailPage({ params }: PageProps) {
   const [reviewError, setReviewError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'highlights' | 'reviews'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'highlights' | 'products' | 'reviews'>('overview'); // added 'products'
   const [siteId, setSiteId] = useState<number | null>(null);
+ const siteImages: Record<string, string> = {
+  'Mysore Palace': '/images/mysore-palace.jpeg',
+  'Hampi Group of Monuments': '/images/hampi.jpeg',
+  'Coorg': '/images/coorg.jpeg',
+  'Gokarna': '/images/gokarna.jpeg',
+  'Kabini Wildlife Sanctuary': '/images/kabini.jpeg',
+  'Hoysaleswara Temple': '/images/hoysaleswara-temple.jpg',
+  'Badami Cave Temples': '/images/badami.jpeg',
+  'Pattadakal Group of Temples': '/images/pattadakal.jpeg',
+  'Chennakesava Temple': '/images/chennakesava-temple.jpg',
+  'Shravanabelagola': '/images/shravanabelagola.jpeg',
+  'Jog Falls': '/images/jog-falls.jpeg',
+  'Murudeshwar Temple': '/images/murdeshwar.jpeg',
+  'Bangalore Palace': '/images/bangalore-palace.jpg',
+  'Bidar Fort': '/images/bidar-fort.jpg',
+  'Chitradurga Fort': '/images/chitradurga-fort.jpg',
+  'Tipu Sultan\'s Summer Palace': '/images/tipu-summer-palace.jpg',
+  'Gulbarga Fort': '/images/gulbarga-fort.jpg',
+  'Srirangapatna Fort': '/images/srirangapatna-fort.jpg',
+  'Devanahalli Fort': '/images/devanahalli-fort.jpg',
+  'Madhugiri Fort': '/images/madhugiri-fort.jpg',
+  'Savandurga': '/images/savandurga.jpg',
+  'Dambal': '/images/dambal.jpg',
+  'Siddhesvara Temple': '/images/siddhesvara-temple.jpg',
+  'Balligavi': '/images/balligavi.jpeg',
+  'Aihole Temple Complex': '/images/aihole.jpg',
+  'Kittur Fort': '/images/kittur-fort.jpeg',
+  'Mahakuta Temples': '/images/mahakuta-temples.jpeg',
+  'Humcha Jain Temple': '/images/humcha-jain-temple.jpeg',
+  'Queen\'s Bath': '/images/queens-bath.jpeg',
+  'Archaeological Museum': '/images/archaeological-museum.jpg',
+  'Folklore Museum': '/images/folklore-museum.jpeg',
+  'Makalidurga': '/images/makalidurga.jpeg',
+  'Talakadu Temples': '/images/talakadu-temples.jpg',
+  'Banashankari Temple': '/images/banashankari-temple.jpg',
+  'Royal Stepwells (Pushkarni)': '/images/royal-stepwells.jpeg',
+  'Government Museum': '/images/government-museum.jpg',
+  'Karnataka Temple Tour': '/images/karnataka-temple-tour.jpeg',
+  'Mysore Palace Light & Sound Show': '/images/mysore-palace.jpg',
+  'Gokarna Water Sports Center': '/images/gokarna-water-sports.jpg',
+  'Hampi Heritage Walk': '/images/hampi-heritage-walk.jpg',
+  'Kabini Bird Watching Expedition': '/images/kabini-bird-watching.webp',
+  'Kabini River Safari Camp': '/images/kabini-river-safari.jpeg',
+  'Coorg Coffee Plantation Stay': '/images/coorg-coffee-plantation.jpeg',
+  'Keshava Temple': '/images/keshava-temple.jpg',
+  'Mahabaleshwar Temple': '/images/mahabaleshwar-temple.jpg',
+  'Banavasi': '/images/banavasi.jpeg',
+  'Lakkundi Temple Complex': '/images/lakkundi.jpeg',
+  'Taj West End Garden': '/images/taj-west-end-garden.jpeg',
+  'Skandagiri (Kalavara Durga)': '/images/skandagiri.jpeg',
+  'Kavala Caves': '/images/kavala-caves.jpeg',
+  'Aihole Jain Caves': '/images/aihole.jpg',
+  'Sangolli Rayanna Fort': '/images/sangolli-rayanna-fort.webp',
+};
+// Add this helper function after the `siteImages` definition (around line 100)
+const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?w=800'; // or use a local placeholder
 
+const getHeritageImageUrl = (imagePath: string | null | undefined, siteName?: string): string => {
+  // 1. If we have a site name and it exists in the local mapping, use that
+  if (siteName && siteImages[siteName]) {
+    return siteImages[siteName];
+  }
+  
+  // 2. If no image path provided, fallback to placeholder
+  if (!imagePath) return PLACEHOLDER_IMAGE;
+  
+  // 3. If it's already a local path starting with '/images/', use it as is
+  if (imagePath.startsWith('/images/')) {
+    return imagePath;
+  }
+  
+  // 4. If it's a full URL (e.g., http://...), use it directly
+  if (imagePath.startsWith('http')) {
+    return imagePath;
+  }
+  
+  // 5. Otherwise, assume it's a relative path from the backend and construct the full URL
+  const fixedPath = imagePath.replace(/\\/g, '/');
+  return `http://localhost:5000/${fixedPath}`;
+};
   // Unwrap params promise
   useEffect(() => {
     const unwrapParams = async () => {
@@ -87,39 +184,39 @@ export default function HeritageDetailPage({ params }: PageProps) {
   }, [params, router]);
 
   // Fetch site data when siteId is available
-  // In HeritageDetailPage.tsx, update the fetchSite useEffect
-
-// Fetch site data when siteId is available
-useEffect(() => {
-  const fetchSite = async () => {
-    if (!siteId) return;
-    
-    try {
-      setLoading(true);
-      const data = await heritageService.getSiteById(siteId);
-      console.log("SITE DATA:", data);
+  useEffect(() => {
+    const fetchSite = async () => {
+      if (!siteId) return;
       
-      if (data) {
-        setSite(data);
+      try {
+        setLoading(true);
+        const data = await heritageService.getSiteById(siteId);
+        console.log("SITE DATA:", data);
         
-        // Check if site is in wishlist using the new helper method
-        if (user) {
-          const isInWishlist = await userService.checkWishlist(siteId);
-          setIsWishlisted(isInWishlist);
+        if (data) {
+          setSite(data);
+          console.log("Pickup points from API:", data?.pickup_points);
+          // NEW: fetch associated products
+          const prods = await heritageService.getSiteProducts(siteId);
+          setProducts(prods);
+          
+          if (user) {
+            const isInWishlist = await userService.checkWishlist(siteId);
+            setIsWishlisted(isInWishlist);
+          }
+        } else {
+          console.error('Site not found');
+          router.push('/dashboard');
         }
-      } else {
-        console.error('Site not found');
-        router.push('/dashboard');
+      } catch (error) {
+        console.error('Error fetching site:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching site:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  fetchSite();
-}, [siteId, router, user]);
+    fetchSite();
+  }, [siteId, router, user]);
 
   // Fetch reviews when site is loaded or tab changes
   useEffect(() => {
@@ -140,86 +237,144 @@ useEffect(() => {
     fetchReviews();
   }, [siteId, activeTab]);
 
+  // NEW: handle product quantity change
+  const updateItemQuantity = (productId: number, quantity: number) => {
+    setSelectedItems(prev => {
+      const existing = prev.find(item => item.product_id === productId);
+      if (existing) {
+        if (quantity <= 0) {
+          return prev.filter(item => item.product_id !== productId);
+        } else {
+          return prev.map(item => item.product_id === productId ? { ...item, quantity } : item);
+        }
+      } else {
+        const product = products.find(p => p.id === productId);
+        if (product && quantity > 0) {
+          return [...prev, { product_id: productId, quantity, name: product.name, price: product.price }];
+        }
+        return prev;
+      }
+    });
+  };
+
+  // NEW: calculate total including products
+  const calculateTotal = (): number => {
+    const entryTotal = (site?.entry_fee_indian || 0) * bookingData.travelers;
+    const productsTotal = selectedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    return entryTotal + productsTotal;
+  };
+
   const handleBookNow = async () => {
-  if (!user) {
-    router.push('/auth');
-    return;
-  }
-
-  if (!bookingData.travelDate) {
-    setBookingError('Please select a travel date');
-    return;
-  }
-
-  if (!site) {
-    setBookingError('Site data not loaded');
-    return;
-  }
-
-  setIsSubmitting(true);
-  setBookingError('');
-
-  try {
-    const formattedDate = new Date(bookingData.travelDate)
-      .toISOString()
-      .split('T')[0];
-
-    const travelers = Number(bookingData.travelers);
-    const entryFee = Number(site.entry_fee_indian);
-
-    if (!entryFee || entryFee <= 0) {
-      setBookingError('Invalid entry fee');
+    if (!user) {
+      router.push('/auth');
       return;
     }
 
-    const totalAmount = entryFee * travelers;
-
-    const bookingPayload = {
-      user_id: Number(user.id),
-      site_id: Number(site.id),
-      enterprise_id: site.enterprise_id ?? null,
-      travel_date: formattedDate,
-      travelers: travelers,
-      total_amount: totalAmount,
-      special_requests: bookingData.specialRequests || null,
-    };
-
-    console.log("FINAL PAYLOAD:", bookingPayload);
-
-    const result = await bookingService.createBooking(bookingPayload);
-
-    if (result.success && result.booking) {
-      setBookingSuccess(true);
-      setTimeout(() => {
-        setShowBookingModal(false);
-        setBookingSuccess(false);
-        setBookingData({ travelDate: '', travelers: 1, specialRequests: '' });
-        router.push('/dashboard/tickets');
-      }, 3000);
-    } else {
-      setBookingError(result.error || 'Booking failed');
+    if (!bookingData.travelDate) {
+      setBookingError('Please select a travel date');
+      return;
     }
 
-  } catch (error: any) {
-    console.error('Booking error:', error);
-
-    if (error.response) {
-      console.error('Backend error:', error.response.data);
-      setBookingError(
-        error.response.data?.message ||
-        `Error ${error.response.status}: Booking failed`
-      );
-    } else {
-      setBookingError('An error occurred. Please try again.');
+    if (!site) {
+      setBookingError('Site data not loaded');
+      return;
     }
 
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+    // Validate pickup point if site has them
+    if (site.pickup_points && site.pickup_points.length > 0 && !bookingData.pickupPoint) {
+      setBookingError('Please select a pickup point');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setBookingError('');
+
+    try {
+      const formattedDate = new Date(bookingData.travelDate)
+        .toISOString()
+        .split('T')[0];
+
+      const travelers = Number(bookingData.travelers);
+
+      const bookingPayload: any = {
+        user_id: Number(user.id),
+        site_id: Number(site.id),
+        enterprise_id: site.enterprise_id ?? null,
+        travel_date: formattedDate,
+        travelers: travelers,
+        special_requests: bookingData.specialRequests || null,
+        pickup_point: bookingData.pickupPoint || null,
+        // NEW: include selected items
+        items: selectedItems.map(item => ({ product_id: item.product_id, quantity: item.quantity }))
+      };
+
+      if (appliedPromo) {
+        bookingPayload.promo_code = appliedPromo.code;
+      }
+
+      console.log("FINAL PAYLOAD:", bookingPayload);
+
+      const result = await bookingService.createBooking(bookingPayload); // backend will compute total
+
+      if (result.success && result.booking) {
+        setBookingSuccess(true);
+        setTimeout(() => {
+          setShowBookingModal(false);
+          setBookingSuccess(false);
+          setBookingData({ travelDate: '', travelers: 1, specialRequests: '', pickupPoint: '' });
+          setSelectedItems([]); // clear selected items
+          router.push('/dashboard/tickets');
+        }, 3000);
+      } else {
+        setBookingError(result.error || 'Booking failed');
+      }
+
+    } catch (error: any) {
+      console.error('Booking error:', error);
+      if (error.response) {
+        console.error('Backend error:', error.response.data);
+        setBookingError(
+          error.response.data?.message ||
+          `Error ${error.response.status}: Booking failed`
+        );
+      } else {
+        setBookingError('An error occurred. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setValidatingPromo(true);
+    setPromoError('');
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/promo-codes/validate`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ code: promoCode }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAppliedPromo(data.data);
+        setPromoCode('');
+      } else {
+        setPromoError(data.message || 'Invalid promo code');
+      }
+    } catch (error) {
+      setPromoError('Failed to validate code');
+    } finally {
+      setValidatingPromo(false);
+    }
+  };
 
   const handleSubmitReview = async () => {
-    if (!user) {
+    if (!user) {  
       router.push('/auth');
       return;
     }
@@ -246,7 +401,6 @@ useEffect(() => {
           setShowReviewModal(false);
           setReviewSuccess(false);
           setReviewData({ rating: 5, title: '', comment: '', visitDate: '' });
-          // Refresh reviews
           heritageService.getReviews(site!.id).then(setReviews);
         }, 2000);
       } else {
@@ -273,6 +427,18 @@ useEffect(() => {
       const added = await userService.addToWishlist(site!.id);
       if (added) setIsWishlisted(true);
     }
+  };
+
+  const calculateDiscountedTotal = (baseTotal: number): number => {
+    if (!appliedPromo) return baseTotal;
+    let discount = 0;
+    if (appliedPromo.discount_type === 'percentage') {
+      discount = (baseTotal * appliedPromo.discount_value) / 100;
+    } else {
+      discount = appliedPromo.discount_value;
+    }
+    if (discount > baseTotal) discount = baseTotal;
+    return baseTotal - discount;
   };
 
   const formatTime = (time?: string) => {
@@ -389,13 +555,13 @@ useEffect(() => {
             <div>
               <div className="relative h-96 rounded-xl overflow-hidden mb-4">
                 <Image
-                  src={images[selectedImage] || defaultImage}
-                  alt={site.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                />
+  src={getHeritageImageUrl(images[selectedImage], site.name) || defaultImage}
+  alt={site.name}
+  fill
+  className="object-cover"
+  unoptimized
+  sizes="(max-width: 768px) 100vw, 50vw"
+/>
                 {site.is_unesco && (
                   <div className="absolute top-4 left-4 bg-amber-500 text-white px-3 py-1 rounded-full text-sm font-medium">
                     UNESCO World Heritage
@@ -422,13 +588,13 @@ useEffect(() => {
                       }`}
                     >
                       <Image
-                        src={img || defaultImage}
-                        alt={`${site.name} - ${idx + 1}`}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                        sizes="(max-width: 768px) 25vw, 10vw"
-                      />
+  src={getHeritageImageUrl(img, site.name) || defaultImage}
+  alt={`${site.name} - ${idx + 1}`}
+  fill
+  className="object-cover"
+  unoptimized
+  sizes="(max-width: 768px) 25vw, 10vw"
+/>
                     </button>
                   ))}
                 </div>
@@ -476,9 +642,9 @@ useEffect(() => {
                 </div>
               )}
 
-              {/* Tabs */}
+              {/* Tabs - updated to include products */}
               <div className="flex gap-4 mb-6 border-b border-gray-200 dark:border-gray-700">
-                {(['overview', 'highlights', 'reviews'] as const).map((tab) => (
+                {(['overview', 'highlights', 'products', 'reviews'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -558,6 +724,64 @@ useEffect(() => {
                     </ul>
                   )}
                   
+                  {/* NEW: Products tab */}
+                  {activeTab === 'products' && (
+                    <div>
+                      {products.length === 0 ? (
+                        <p className={`text-center py-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          No products available for this site.
+                        </p>
+                      ) : (
+                        <div className="space-y-4">
+                          {products.map(product => {
+                            const selected = selectedItems.find(i => i.product_id === product.id);
+                            return (
+                              <div key={product.id} className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                                <div className="flex items-start gap-3">
+                                  {product.thumbnail && (
+                                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                                      <Image
+                                        src={product.thumbnail.startsWith('http') ? product.thumbnail : `http://localhost:5000/${product.thumbnail.replace(/\\/g, '/')}`}
+                                        alt={product.name}
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="flex-1">
+                                    <h4 className="text-sm font-medium">{product.name}</h4>
+                                    <p className="text-xs text-gray-400 mt-1">by {product.seller_shop_name}</p>
+                                    {product.description && (
+                                      <p className="text-xs text-gray-500 mt-1">{product.description}</p>
+                                    )}
+                                    <p className="text-sm font-bold mt-2">₹{product.price}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => updateItemQuantity(product.id, (selected?.quantity || 0) - 1)}
+                                      className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 disabled:opacity-50"
+                                      disabled={!selected}
+                                    >
+                                      -
+                                    </button>
+                                    <span className="w-8 text-center">{selected?.quantity || 0}</span>
+                                    <button
+                                      onClick={() => updateItemQuantity(product.id, (selected?.quantity || 0) + 1)}
+                                      className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   {activeTab === 'reviews' && (
                     <div>
                       {user && (
@@ -634,11 +858,6 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Enterprise Info */}
-          {/* Enterprise Info */}
-          {/* Enterprise Info */}
-
-
           {/* Contact Info */}
           {(site.contact_phone || site.contact_email || site.website) && (
             <div className={`mb-8 p-6 rounded-xl ${
@@ -688,7 +907,7 @@ useEffect(() => {
         </div>
       </main>
 
-      {/* Booking Modal */}
+      {/* Booking Modal - updated */}
       <AnimatePresence>
         {showBookingModal && (
           <motion.div
@@ -732,7 +951,7 @@ useEffect(() => {
                     {site.location}
                   </p>
 
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                     <div>
                       <label className="block text-sm font-medium mb-2">Travel Date</label>
                       <input
@@ -765,6 +984,127 @@ useEffect(() => {
                       </select>
                     </div>
 
+                    {/* Pickup Point Dropdown */}
+                    {site.pickup_points && site.pickup_points.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Pickup Point</label>
+                        <select
+                          value={bookingData.pickupPoint}
+                          onChange={(e) => setBookingData({...bookingData, pickupPoint: e.target.value})}
+                          className={`w-full px-4 py-2 rounded-lg border ${
+                            isDarkMode 
+                              ? "bg-gray-800 border-gray-700" 
+                              : "bg-white border-gray-300"
+                          } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                          required
+                        >
+                          <option value="">Select a pickup point</option>
+                          {site.pickup_points.map((point, idx) => (
+                            <option key={idx} value={point}>{point}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* NEW: Products selection inside modal */}
+                    {products.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-medium mb-2">Add Products</h3>
+                        <div className="space-y-3">
+                          {products.map(product => {
+                            const selected = selectedItems.find(i => i.product_id === product.id);
+                            return (
+                              <div key={product.id} className={`p-3 rounded-lg flex items-center gap-3 ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                                {product.thumbnail && (
+                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                                    <Image
+                                      src={product.thumbnail.startsWith('http') ? product.thumbnail : `http://localhost:5000/${product.thumbnail.replace(/\\/g, '/')}`}
+                                      alt={product.name}
+                                      fill
+                                      className="object-cover"
+                                      unoptimized
+                                    />
+                                  </div>
+                                )}
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{product.name}</p>
+                                  <p className="text-xs text-gray-400">₹{product.price}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => updateItemQuantity(product.id, (selected?.quantity || 0) - 1)}
+                                    className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600 disabled:opacity-50"
+                                    disabled={!selected}
+                                  >
+                                    -
+                                  </button>
+                                  <span className="w-8 text-center">{selected?.quantity || 0}</span>
+                                  <button
+                                    onClick={() => updateItemQuantity(product.id, (selected?.quantity || 0) + 1)}
+                                    className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center hover:bg-gray-600"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Promo Code Input */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Promo Code (Optional)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={promoCode}
+                          onChange={(e) => {
+                            setPromoCode(e.target.value.toUpperCase());
+                            setPromoError('');
+                          }}
+                          placeholder="Enter promo code"
+                          className={`flex-1 px-4 py-2 rounded-lg border ${
+                            isDarkMode 
+                              ? "bg-gray-800 border-gray-700" 
+                              : "bg-white border-gray-300"
+                          } focus:outline-none focus:ring-2 focus:ring-emerald-500`}
+                          disabled={!!appliedPromo || isSubmitting}
+                        />
+                        {!appliedPromo ? (
+                          <button
+                            type="button"
+                            onClick={handleApplyPromo}
+                            disabled={!promoCode.trim() || validatingPromo}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50"
+                          >
+                            {validatingPromo ? '...' : 'Apply'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAppliedPromo(null);
+                              setPromoCode('');
+                            }}
+                            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      {promoError && <p className="text-red-500 text-sm mt-1">{promoError}</p>}
+                      {appliedPromo && (
+                        <p className="text-emerald-500 text-sm mt-1">
+                          Promo code applied: {appliedPromo.code} –{' '}
+                          {appliedPromo.discount_type === 'percentage'
+                            ? `${appliedPromo.discount_value}% off`
+                            : `₹${appliedPromo.discount_value} off`}
+                        </p>
+                      )}
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium mb-2">Special Requests (Optional)</label>
                       <textarea
@@ -784,18 +1124,41 @@ useEffect(() => {
                       <p className="text-red-500 text-sm">{bookingError}</p>
                     )}
 
-                    <div className={`p-4 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
-                      <div className="flex justify-between mb-2">
-                        <span>Price per person</span>
-                        <span>₹{site.entry_fee_indian || 0}</span>
-                      </div>
-                      <div className="flex justify-between font-bold">
-                        <span>Total</span>
-                        <span className="text-emerald-500">
-                          ₹{(site.entry_fee_indian || 0) * bookingData.travelers}
-                        </span>
-                      </div>
-                    </div>
+                    {/* Dynamic Price Summary with products */}
+                    {(() => {
+                      const entryTotal = (site.entry_fee_indian || 0) * bookingData.travelers;
+                      const productsTotal = selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+                      const baseTotal = entryTotal + productsTotal;
+                      const finalTotal = appliedPromo ? calculateDiscountedTotal(baseTotal) : baseTotal;
+                      return (
+                        <div className={`p-4 rounded-lg ${isDarkMode ? "bg-gray-800" : "bg-gray-100"}`}>
+                          <div className="flex justify-between mb-2">
+                            <span>Entry fee ({bookingData.travelers} person{bookingData.travelers > 1 ? 's' : ''})</span>
+                            <span>₹{entryTotal}</span>
+                          </div>
+                          {selectedItems.length > 0 && (
+                            <>
+                              {selectedItems.map(item => (
+                                <div key={item.product_id} className="flex justify-between text-sm">
+                                  <span>{item.name} x{item.quantity}</span>
+                                  <span>₹{item.price * item.quantity}</span>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                          {appliedPromo && (
+                            <div className="flex justify-between text-emerald-500 text-sm mb-1">
+                              <span>Discount ({appliedPromo.discount_type === 'percentage' ? `${appliedPromo.discount_value}%` : `₹${appliedPromo.discount_value}`})</span>
+                              <span>-₹{(baseTotal - finalTotal).toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between font-bold mt-2 pt-2 border-t border-gray-600">
+                            <span>Total</span>
+                            <span className="text-emerald-500">₹{finalTotal.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="flex gap-3">
                       <button
@@ -820,7 +1183,7 @@ useEffect(() => {
         )}
       </AnimatePresence>
 
-      {/* Review Modal */}
+      {/* Review Modal (unchanged) */}
       <AnimatePresence>
         {showReviewModal && (
           <motion.div

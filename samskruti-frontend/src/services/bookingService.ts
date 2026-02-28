@@ -96,9 +96,7 @@ export const bookingService = {
   // Get user's tickets with booking details
   getUserTickets: async (): Promise<ExtendedTicket[]> => {
     try {
-      // Get user ID from token
       const userId = getUserIdFromToken();
-      
       if (!userId) {
         console.error('❌ No user ID available to fetch tickets');
         return [];
@@ -106,7 +104,6 @@ export const bookingService = {
       
       console.log(`🎟️ Fetching tickets for user: ${userId}`);
       
-      // Fetch tickets
       const ticketsResponse = await api.get<ApiResponse<Ticket[]>>(`/tickets/user/${userId}?history=true`);
       
       if (!ticketsResponse.data?.success || !ticketsResponse.data?.data) {
@@ -116,20 +113,16 @@ export const bookingService = {
       const tickets = ticketsResponse.data.data;
       console.log(`✅ Fetched ${tickets.length} tickets`);
       
-      // Fetch bookings to get additional details
       const bookingsResponse = await api.get<ApiResponse<Booking[]>>('/bookings/user');
       const bookings = bookingsResponse.data?.success ? bookingsResponse.data.data || [] : [];
       
-      // Create a map of booking_id to booking for quick lookup
       const bookingMap = new Map<number, Booking>();
       bookings.forEach(booking => {
         bookingMap.set(booking.id, booking);
       });
       
-      // Merge ticket data with booking data
       const extendedTickets: ExtendedTicket[] = tickets.map(ticket => {
         const booking = bookingMap.get(ticket.booking_id);
-        
         return {
           ...ticket,
           travel_date: booking?.travel_date,
@@ -152,7 +145,6 @@ export const bookingService = {
   getBookingById: async (bookingId: number): Promise<Booking | null> => {
     try {
       const response = await api.get<ApiResponse<Booking>>(`/bookings/${bookingId}`);
-      
       if (response.data && response.data.success) {
         return response.data.data;
       }
@@ -167,7 +159,6 @@ export const bookingService = {
   getBookingByReference: async (reference: string): Promise<Booking | null> => {
     try {
       const response = await api.get<ApiResponse<Booking>>(`/bookings/reference/${reference}`);
-      
       if (response.data && response.data.success) {
         return response.data.data;
       }
@@ -185,7 +176,6 @@ export const bookingService = {
       if (!userId) return [];
       
       const response = await api.get<ApiResponse<Booking[]>>(`/bookings/user/${userId}/upcoming`);
-      
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
@@ -203,7 +193,6 @@ export const bookingService = {
       if (!userId) return [];
       
       const response = await api.get<ApiResponse<Booking[]>>(`/bookings/user/${userId}/past`);
-      
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
@@ -214,15 +203,18 @@ export const bookingService = {
     }
   },
 
-  // Create booking
+  // Create booking (updated to accept promo_code)
+    // Create booking (updated to accept items)
   createBooking: async (bookingData: {
     user_id: number;
     site_id: number;
     enterprise_id?: number | null;
     travel_date: string;
     travelers: number;
-    total_amount: number;
     special_requests?: string | null;
+    pickup_point?: string | null;
+    promo_code?: string;
+    items?: Array<{ product_id: number; quantity: number }>;  // new
   }): Promise<{ success: boolean; booking?: Booking; error?: string }> => {
     try {
       console.log('📝 Creating booking with data:', bookingData);
@@ -230,26 +222,22 @@ export const bookingService = {
       const response = await api.post<ApiResponse<Booking>>('/bookings', bookingData);
       
       if (response.data && response.data.success && response.data.data) {
-        // Dispatch event to refresh dashboard
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('booking-updated', { 
             detail: { type: 'booking', bookingId: response.data.data.id } 
           }));
         }
-        
         return {
           success: true,
           booking: response.data.data
         };
       }
-      
       return {
         success: false,
         error: response.data?.message || 'Failed to create booking'
       };
     } catch (error: any) {
       console.error('Error creating booking:', error);
-      
       if (error.response) {
         return {
           success: false,
@@ -275,19 +263,16 @@ export const bookingService = {
       const response = await api.post<ApiResponse<any>>(`/bookings/${bookingId}/cancel`, { reason });
       
       if (response.data && response.data.success) {
-        // Dispatch event to refresh dashboard
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('booking-updated', { 
             detail: { type: 'cancel', bookingId } 
           }));
         }
-        
         return {
           success: true,
           message: response.data.message || 'Booking cancelled successfully'
         };
       }
-      
       return {
         success: false,
         message: response.data?.message || 'Failed to cancel booking'
@@ -350,7 +335,6 @@ export const bookingService = {
   getTicketById: async (ticketId: number): Promise<Ticket | null> => {
     try {
       const response = await api.get<ApiResponse<Ticket>>(`/tickets/${ticketId}`);
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
@@ -361,37 +345,28 @@ export const bookingService = {
     }
   },
 
-  // Get ticket by ticket number with booking details
-  // services/bookingService.ts - Update this method (around line 360)
-
-// Get ticket by ticket number with booking details
-// services/bookingService.ts - Update getTicketByNumber method (around line 360)
-
-// Get ticket by ticket number with booking details
-getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> => {
-  try {
-    console.log(`🔍 Fetching ticket by number: ${ticketNumber}`);
-    
-    // Use the correct endpoint - should match your backend route
-    const response = await api.get<ApiResponse<Ticket>>(`/tickets/${ticketNumber}`);
-    
-    if (!response.data?.success || !response.data?.data) {
-      console.error('Ticket not found in API');
+  // Get ticket by number with booking details
+  getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> => {
+    try {
+      console.log(`🔍 Fetching ticket by number: ${ticketNumber}`);
+      
+      const response = await api.get<ApiResponse<Ticket>>(`/tickets/${ticketNumber}`);
+      
+      if (!response.data?.success || !response.data?.data) {
+        console.error('Ticket not found in API');
+        return null;
+      }
+      
+      const ticket = response.data.data;
+      console.log('✅ Ticket found:', ticket);
+      
+      return ticket as ExtendedTicket;
+      
+    } catch (error) {
+      console.error('Error fetching ticket by number:', error);
       return null;
     }
-    
-    const ticket = response.data.data;
-    console.log('✅ Ticket found:', ticket);
-    
-    // The backend now returns extended ticket with booking data
-    // So we can just return it directly
-    return ticket as ExtendedTicket;
-    
-  } catch (error) {
-    console.error('Error fetching ticket by number:', error);
-    return null;
-  }
-},
+  },
 
   // Get active tickets
   getActiveTickets: async (): Promise<Ticket[]> => {
@@ -400,7 +375,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
       if (!userId) return [];
       
       const response = await api.get<ApiResponse<Ticket[]>>(`/tickets/user/${userId}/active`);
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
@@ -418,7 +392,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
       if (!userId) return [];
       
       const response = await api.get<ApiResponse<Ticket[]>>(`/tickets/user/${userId}/upcoming`);
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
@@ -435,19 +408,16 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
       const response = await api.post<ApiResponse<any>>(`/tickets/${ticketNumber}/cancel`, { reason });
       
       if (response.data && response.data.success) {
-        // Dispatch event to refresh dashboard
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('ticket-updated', { 
             detail: { type: 'cancel', ticketNumber } 
           }));
         }
-        
         return {
           success: true,
           message: response.data.message || 'Ticket cancelled successfully'
         };
       }
-      
       return {
         success: false,
         message: response.data?.message || 'Failed to cancel ticket'
@@ -480,7 +450,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
           ticket: response.data.data
         };
       }
-      
       return {
         valid: false,
         message: response.data?.message || 'Invalid ticket'
@@ -515,11 +484,9 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
       }
       
       const response = await api.get<ApiResponse<any>>(`/tickets/user/${userId}/stats`);
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
-      
       return {
         total_tickets: 0,
         active_tickets: 0,
@@ -544,12 +511,9 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
     try {
       const response = await api.get<Blob>(
         `/tickets/${ticketNumber}/download`,
-        {
-          responseType: 'blob'
-        }
+        { responseType: 'blob' }
       );
 
-      // Create a download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -577,7 +541,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
           message: response.data.message || 'Ticket sent successfully'
         };
       }
-      
       return {
         success: false,
         message: response.data?.message || 'Failed to send ticket'
@@ -595,7 +558,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
   getTicketsBatch: async (ticketIds: number[]): Promise<Ticket[]> => {
     try {
       const response = await api.post<ApiResponse<Ticket[]>>('/tickets/batch', { ticket_ids: ticketIds });
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }
@@ -610,7 +572,6 @@ getTicketByNumber: async (ticketNumber: string): Promise<ExtendedTicket | null> 
   searchTickets: async (query: string): Promise<Ticket[]> => {
     try {
       const response = await api.get<ApiResponse<Ticket[]>>(`/tickets/search?q=${encodeURIComponent(query)}`);
-      
       if (response.data && response.data.success && response.data.data) {
         return response.data.data;
       }

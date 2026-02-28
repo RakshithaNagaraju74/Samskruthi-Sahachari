@@ -141,45 +141,51 @@ export default function EnterpriseDashboardPage() {
     <div className="min-h-screen bg-gray-950">
       {/* Header */}
       <header className="bg-gray-900/50 backdrop-blur-xl border-b border-gray-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-light text-white">
-                Enterprise<span className="text-emerald-400">.</span> Dashboard
-              </h1>
-              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs">
-                {user?.email}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link
-                href="/enterprise/sites"
-                className="text-sm text-gray-400 hover:text-white transition-colors"
-              >
-                Manage Sites
-              </Link>
-              <Link
-                href="/enterprise/bookings"
-                className="text-sm text-gray-400 hover:text-white transition-colors"
-              >
-                Bookings
-              </Link>
-              <Link
-                href="/enterprise/analytics"
-                className="text-sm text-gray-400 hover:text-white transition-colors"
-              >
-                Analytics
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-light text-white">
+          Enterprise<span className="text-emerald-400">.</span> Dashboard
+        </h1>
+        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full text-xs">
+          {user?.email}
+        </span>
+      </div>
+      <div className="flex items-center gap-4">
+        <Link
+          href="/enterprise/sites"
+          className="text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          Manage Sites
+        </Link>
+        <Link
+          href="/enterprise/bookings"
+          className="text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          Bookings
+        </Link>
+        <Link
+          href="/enterprise/analytics"
+          className="text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          Analytics
+        </Link>
+        <Link
+          href="/enterprise/messages"
+          className="text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          Messages
+        </Link>
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
 
       {/* Welcome Section */}
       <div className="relative overflow-hidden">
@@ -431,43 +437,55 @@ export default function EnterpriseDashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link href="/enterprise/sites/new">
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
-            >
-              <div className="text-3xl mb-3">➕</div>
-              <h3 className="text-white font-medium mb-1">Add New Site</h3>
-              <p className="text-gray-400 text-sm">List a new heritage site</p>
-            </motion.div>
-          </Link>
+      {/* Quick Actions */}
+<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <Link href="/enterprise/sites/new">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
+      >
+        <div className="text-3xl mb-3">➕</div>
+        <h3 className="text-white font-medium mb-1">Add New Site</h3>
+        <p className="text-gray-400 text-sm">List a new heritage site</p>
+      </motion.div>
+    </Link>
 
-          <Link href="/enterprise/sites">
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
-            >
-              <div className="text-3xl mb-3">📋</div>
-              <h3 className="text-white font-medium mb-1">Manage Sites</h3>
-              <p className="text-gray-400 text-sm">Edit or update your sites</p>
-            </motion.div>
-          </Link>
+    <Link href="/enterprise/sites">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
+      >
+        <div className="text-3xl mb-3">📋</div>
+        <h3 className="text-white font-medium mb-1">Manage Sites</h3>
+        <p className="text-gray-400 text-sm">Edit or update your sites</p>
+      </motion.div>
+    </Link>
 
-          <Link href="/enterprise/analytics">
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
-            >
-              <div className="text-3xl mb-3">📊</div>
-              <h3 className="text-white font-medium mb-1">View Analytics</h3>
-              <p className="text-gray-400 text-sm">Detailed performance reports</p>
-            </motion.div>
-          </Link>
-        </div>
-      </div>
+    <Link href="/enterprise/analytics">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
+      >
+        <div className="text-3xl mb-3">📊</div>
+        <h3 className="text-white font-medium mb-1">View Analytics</h3>
+        <p className="text-gray-400 text-sm">Detailed performance reports</p>
+      </motion.div>
+    </Link>
+
+    <Link href="/enterprise/messages">
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        className="bg-gray-900/30 border border-gray-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-colors"
+      >
+        <div className="text-3xl mb-3">💬</div>
+        <h3 className="text-white font-medium mb-1">Messages</h3>
+        <p className="text-gray-400 text-sm">Chat with tourists</p>
+      </motion.div>
+    </Link>
+  </div>
+</div>
     </div>
   );
 }

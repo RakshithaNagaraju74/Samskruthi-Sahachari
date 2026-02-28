@@ -40,6 +40,7 @@ interface Site {
   views: number;
   tags?: string[];
   highlights?: string[];
+  pickup_points?: string[];  // new field
   created_at: string;
 }
 
@@ -425,6 +426,23 @@ export default function EnterpriseSitesPage() {
                         👁️ {site.views || 0} views
                     </span>
                   </div>
+
+                  {/* Pickup Points Display */}
+                  {site.pickup_points && site.pickup_points.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Pickup Points:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {site.pickup_points.map((point, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full text-[10px]"
+                          >
+                            🚌 {point}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   
                   <p className="text-gray-300 text-sm line-clamp-2 mb-4">
                     {site.short_description || site.description?.substring(0, 100) + '...'}

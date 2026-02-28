@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const db = require('../config/database'); // 👈 ADD THIS LINE
 const HeritageSite = require('../models/HeritageSite');
 const Review = require('../models/Review');
+const heritageController = require('../controllers/heritageController');
 const { authMiddleware } = require('../middlewares/authMiddleware');
 
 // Get all heritage sites
@@ -301,6 +303,37 @@ router.get('/nearby', async (req, res) => {
     }
 });
 
+// GET /api/heritage/recommended?categories=heritage,nature
+router.get('/recommended', async (req, res) => {
+    try {
+        const { categories } = req.query;
+        if (!categories) {
+            return res.status(400).json({ success: false, message: 'Categories required' });
+        }
+        const categoryArray = categories.split(',').map(c => c.trim());
+        const result = await db.query(
+            `SELECT * FROM heritage_sites 
+             WHERE is_active = true AND category = ANY($1::text[])
+             ORDER BY rating DESC NULLS LAST, views DESC
+             LIMIT 10`,
+            [categoryArray]
+        );
+        // Normalize sites (use the same normalization as in your heritageService)
+        const sites = result.rows.map(site => ({
+            ...site,
+            gallery_images: site.gallery_images ? 
+                (typeof site.gallery_images === 'string' ? JSON.parse(site.gallery_images) : site.gallery_images) : [],
+            tags: site.tags ? (typeof site.tags === 'string' ? JSON.parse(site.tags) : site.tags) : [],
+            highlights: site.highlights ? (typeof site.highlights === 'string' ? JSON.parse(site.highlights) : site.highlights) : [],
+            pickup_points: site.pickup_points ? (typeof site.pickup_points === 'string' ? JSON.parse(site.pickup_points) : site.pickup_points) : []
+        }));
+        res.json({ success: true, data: sites });
+    } catch (error) {
+        console.error('Error fetching recommended sites:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch recommendations' });
+    }
+});
+
 // Get all districts
 router.get('/districts', async (req, res) => {
     try {
@@ -409,7 +442,7 @@ router.get('/sites/:id/reviews', async (req, res) => {
         });
     }
 });
-
+router.get('/sites/:id/products', heritageController.getSiteProducts);
 // Add a review (protected)
 router.post('/sites/:id/reviews', authMiddleware, async (req, res) => {
     try {

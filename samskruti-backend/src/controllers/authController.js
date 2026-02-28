@@ -244,7 +244,7 @@ class AuthController {
     }
   }
   
-  // Login user - FIXED VERSION
+  // Login user - updated to include enterprise_id in token
   async login(req, res) {
     try {
       const { email, password, rememberMe } = req.body;
@@ -285,6 +285,7 @@ class AuthController {
       let redirectTo = null;
       let profileComplete = false;
       let profile = null;
+      let enterpriseId = null;
       
       if (actualUserType === 'enterprise') {
         const enterpriseQuery = await db.query(
@@ -294,6 +295,7 @@ class AuthController {
         profile = enterpriseQuery.rows[0];
         
         if (profile) {
+          enterpriseId = profile.id; // capture enterprise ID
           if (profile.verification_status === 'approved') {
             redirectTo = '/enterprise/dashboard';
             profileComplete = true;
@@ -359,20 +361,21 @@ class AuthController {
         console.log('Note: Could not update last login');
       }
       
-      // Generate token with BOTH role and user_type
+      // Generate token with BOTH role and user_type, plus enterprise_id
       const tokenExpiry = rememberMe ? '30d' : (process.env.JWT_EXPIRES_IN || '7d');
       const token = jwt.sign(
         { 
           id: user.id, 
           email: user.email, 
           role: actualUserType,
-          user_type: actualUserType
+          user_type: actualUserType,
+          enterprise_id: enterpriseId
         },
         process.env.JWT_SECRET || 'your-secret-key',
         { expiresIn: tokenExpiry }
       );
       
-      // Create user object for response
+      // Create user object for response (include enterprise_id)
       const userResponse = {
         id: user.id,
         email: user.email,
@@ -381,7 +384,8 @@ class AuthController {
         is_active: user.is_active,
         is_verified: user.is_verified,
         last_login: user.last_login,
-        created_at: user.created_at
+        created_at: user.created_at,
+        enterprise_id: enterpriseId
       };
       
       console.log('Login successful for:', email, 'role:', actualUserType, 'redirecting to:', redirectTo);
@@ -408,7 +412,7 @@ class AuthController {
     }
   }
   
-  // Refresh token
+  // Refresh token - updated to include enterprise_id
   async refreshToken(req, res) {
     try {
       const { refreshToken } = req.body;
@@ -443,13 +447,26 @@ class AuthController {
       // Determine actual user type
       const actualUserType = user.role || user.user_type || 'user';
       
-      // Generate new access token
+      // If enterprise, fetch enterprise_id
+      let enterpriseId = null;
+      if (actualUserType === 'enterprise') {
+        const enterpriseQuery = await db.query(
+          'SELECT id FROM enterprises WHERE user_id = $1',
+          [user.id]
+        );
+        if (enterpriseQuery.rows.length > 0) {
+          enterpriseId = enterpriseQuery.rows[0].id;
+        }
+      }
+      
+      // Generate new access token with enterprise_id
       const newToken = jwt.sign(
         { 
           id: user.id, 
           email: user.email, 
           role: actualUserType,
-          user_type: actualUserType
+          user_type: actualUserType,
+          enterprise_id: enterpriseId
         },
         process.env.JWT_SECRET || 'your-secret-key',
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
@@ -511,7 +528,7 @@ class AuthController {
     }
   }
   
-  // Get current user
+  // Get current user - updated to include enterprise_id
   async getCurrentUser(req, res) {
     try {
       const user = await User.findById(req.user.id);
@@ -528,12 +545,16 @@ class AuthController {
       
       // Get profile based on user type
       let profile = null;
+      let enterpriseId = null;
       if (actualUserType === 'enterprise') {
         const profileQuery = await db.query(
           'SELECT * FROM enterprises WHERE user_id = $1',
           [user.id]
         );
         profile = profileQuery.rows[0];
+        if (profile) {
+          enterpriseId = profile.id;
+        }
       } else if (actualUserType === 'seller') {
         const profileQuery = await db.query(
           'SELECT * FROM sellers WHERE user_id = $1',
@@ -548,7 +569,7 @@ class AuthController {
         profile = profileQuery.rows[0];
       }
       
-      // Create user response
+      // Create user response with enterprise_id
       const userResponse = {
         id: user.id,
         email: user.email,
@@ -557,7 +578,8 @@ class AuthController {
         is_active: user.is_active,
         is_verified: user.is_verified,
         last_login: user.last_login,
-        created_at: user.created_at
+        created_at: user.created_at,
+        enterprise_id: enterpriseId
       };
       
       res.json({

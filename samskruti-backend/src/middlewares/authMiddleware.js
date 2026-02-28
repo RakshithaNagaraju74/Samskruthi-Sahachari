@@ -18,6 +18,8 @@ const authMiddleware = async (req, res, next) => {
 
     // Verify token
     const decoded = verifyToken(token);
+    console.log("🔍 DECODED TOKEN:", decoded);
+    
     if (!decoded) {
       return res.status(401).json({
         success: false,
@@ -28,8 +30,8 @@ const authMiddleware = async (req, res, next) => {
     // Add user info to request
     req.user = decoded;
     
-    // Debug log
-    console.log('Auth middleware - Decoded user:', {
+    // Debug log with both role fields
+    console.log('✅ Auth middleware - User authenticated:', {
       id: decoded.id,
       email: decoded.email,
       role: decoded.role,
@@ -38,7 +40,7 @@ const authMiddleware = async (req, res, next) => {
     
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    console.error('❌ Auth middleware error:', error);
     res.status(401).json({
       success: false,
       message: 'Not authorized'
@@ -46,27 +48,28 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-// Role-based authorization middleware - UPDATED to check both role and user_type
+// Role-based authorization middleware - checks both role and user_type
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      console.log('Authorize failed: No user in request');
+      console.log('❌ Authorize failed: No user in request');
       return res.status(401).json({
         success: false,
         message: 'Not authorized'
       });
     }
 
-    // Check both possible role fields
+    // Check both possible role fields (role or user_type)
     const userRole = req.user.role || req.user.user_type;
     
-    console.log('Authorize check:', {
+    console.log('🔑 Authorize check:', {
       requiredRoles: roles,
       userRole: userRole,
+      roleField: req.user.role ? 'role' : (req.user.user_type ? 'user_type' : 'none'),
       hasRole: roles.includes(userRole)
     });
 
-    if (!roles.includes(userRole)) {
+    if (!userRole || !roles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to perform this action'
@@ -77,7 +80,18 @@ const authorize = (...roles) => {
   };
 };
 
+// Specific role checkers for common use cases
+const authorizeAdmin = authorize('admin', 'superadmin');
+const authorizeEnterprise = authorize('enterprise', 'enterprise_admin');
+const authorizeSeller = authorize('seller', 'vendor');
+const authorizeUser = authorize('user', 'customer', 'visitor');
+
 module.exports = {
   authMiddleware,
-  authorize
+  authorize,
+  // Export specific role checkers for convenience
+  authorizeAdmin,
+  authorizeEnterprise,
+  authorizeSeller,
+  authorizeUser
 };

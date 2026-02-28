@@ -18,17 +18,15 @@ class GroqService {
   private favoritesData: any[] = [];
   private userTickets: any[] = [];
 
-  // Method to update site data
+  // ✅ Add missing update methods
   updateSiteData(sites: any[]) {
     this.siteData = sites;
   }
 
-  // Method to update favorites data
   updateFavoritesData(favorites: any[]) {
     this.favoritesData = favorites;
   }
 
-  // Method to update tickets data
   updateTicketsData(tickets: any[]) {
     this.userTickets = tickets;
   }
@@ -185,4 +183,5 @@ class GroqService {
   }
 }
 
+// Export a singleton instance
 export const groqService = new GroqService();

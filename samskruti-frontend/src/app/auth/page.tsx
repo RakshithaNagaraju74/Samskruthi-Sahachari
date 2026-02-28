@@ -48,7 +48,7 @@ export default function AuthPage() {
   const [companyPincode, setCompanyPincode] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
   
-  // Document upload states
+  // Document upload states (enterprise)
   const [registrationCert, setRegistrationCert] = useState<File | null>(null);
   const [gstCert, setGstCert] = useState<File | null>(null);
   const [panCard, setPanCard] = useState<File | null>(null);
@@ -74,6 +74,11 @@ export default function AuthPage() {
   const [bankIfscCode, setBankIfscCode] = useState("");
   const [bankName, setBankName] = useState("");
   
+  // Seller document upload states
+  const [sellerGstCert, setSellerGstCert] = useState<File | null>(null);
+  const [sellerPanCard, setSellerPanCard] = useState<File | null>(null);
+  const [sellerBankProof, setSellerBankProof] = useState<File | null>(null);
+  
   // User specific fields
   const [phone, setPhone] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -96,7 +101,10 @@ export default function AuthPage() {
     panNumber: "",
     gstNumber: "",
     bankAccountNumber: "",
-    bankIfscCode: ""
+    bankIfscCode: "",
+    sellerPhone: "",
+    ownerName: "",
+    shopName: ""
   });
 
   // Carousel images
@@ -136,6 +144,65 @@ export default function AuthPage() {
     setErrors(prev => ({ ...prev, [field]: "" }));
   };
 
+  // Validate only the current step (for navigation)
+  const validateStep = (step: number): boolean => {
+    const newErrors = { ...errors };
+    let isValid = true;
+
+    if (userType === 'seller') {
+      if (step === 1) {
+        if (!shopName) {
+          newErrors.shopName = "Shop name is required";
+          isValid = false;
+        }
+        if (!ownerName) {
+          newErrors.ownerName = "Owner name is required";
+          isValid = false;
+        }
+      } else if (step === 2) {
+        if (!sellerPhone) {
+          newErrors.sellerPhone = "Phone number is required";
+          isValid = false;
+        }
+        if (!shopAddress) {
+          newErrors.shopAddress = "Shop address is required";
+          isValid = false;
+        }
+        if (!email) {
+          newErrors.email = "Email is required";
+          isValid = false;
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+          newErrors.email = "Invalid email format";
+          isValid = false;
+        }
+        if (!password) {
+          newErrors.password = "Password is required";
+          isValid = false;
+        } else if (password.length < 8) {
+          newErrors.password = "Password must be at least 8 characters";
+          isValid = false;
+        }
+      } else if (step === 3) {
+        if (!bankAccountNumber) {
+          newErrors.bankAccountNumber = "Bank account number is required";
+          isValid = false;
+        }
+        if (!bankIfscCode) {
+          newErrors.bankIfscCode = "IFSC code is required";
+          isValid = false;
+        }
+      }
+    }
+
+    setErrors(newErrors);
+    if (!isValid) {
+      const firstError = Object.values(newErrors).find(err => err !== "");
+      if (firstError) showToastMessage(firstError, "error");
+    }
+    return isValid;
+  };
+
+  // Full form validation for final submit
   const validateForm = () => {
     const newErrors = {
       name: "",
@@ -151,7 +218,10 @@ export default function AuthPage() {
       panNumber: "",
       gstNumber: "",
       bankAccountNumber: "",
-      bankIfscCode: ""
+      bankIfscCode: "",
+      sellerPhone: "",
+      ownerName: "",
+      shopName: ""
     };
     let isValid = true;
 
@@ -185,8 +255,6 @@ export default function AuthPage() {
           newErrors.name = "Full name is required";
           isValid = false;
         }
-        
-        // Confirm password only for user registration
         if (!confirmPassword) {
           newErrors.confirmPassword = "Please confirm your password";
           isValid = false;
@@ -217,15 +285,15 @@ export default function AuthPage() {
         }
       } else if (userType === 'seller') {
         if (!shopName) {
-          newErrors.name = "Shop name is required";
+          newErrors.shopName = "Shop name is required";
           isValid = false;
         }
         if (!ownerName) {
-          newErrors.name = "Owner name is required";
+          newErrors.ownerName = "Owner name is required";
           isValid = false;
         }
         if (!sellerPhone) {
-          newErrors.contactPhone = "Phone number is required";
+          newErrors.sellerPhone = "Phone number is required";
           isValid = false;
         }
         if (!shopAddress) {
@@ -271,38 +339,50 @@ export default function AuthPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
       
-      // In your AuthPage component, update the login section:
+      if (isLogin) {
+        // Login
+        const response = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, rememberMe }),
+        });
 
-if (isLogin) {
-  // Login API call
-  const response = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, rememberMe }),
-  });
+        const data = await response.json();
 
-  const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
 
-  if (!response.ok) throw new Error(data.message);
+        if (data.success && data.data?.token) {
+          localStorage.clear();
+          localStorage.setItem('token', data.data.token);
+          if (data.data.user) {
+            localStorage.setItem('user', JSON.stringify(data.data.user));
+          }
 
-  if (data.success && data.data?.token) {
-    localStorage.clear();
-    localStorage.setItem('token', data.data.token);
-    if (data.data.user) {
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-    }
-    
-    showToastMessage("Login successful! Redirecting...", "success");
-    
-    // Use the redirectTo from the response
-    const redirectPath = data.data.redirectTo || '/dashboard';
-    console.log('Redirecting to:', redirectPath);
-    
-    setTimeout(() => {
-      window.location.href = redirectPath;
-    }, 1000);
-  }
-}else {
+          showToastMessage("Login successful! Redirecting...", "success");
+
+          let redirectPath = '/dashboard';
+          if (data.data.user) {
+            const role = data.data.user.role;
+            if (role === 'influencer') {
+              redirectPath = '/dashboard/influencer';
+            } else if (role === 'enterprise') {
+              redirectPath = '/dashboard/enterprise';
+            } else if (role === 'seller') {
+              redirectPath = '/dashboard/seller';
+            } else if (role === 'admin') {
+              redirectPath = '/admin';
+            }
+          }
+
+          if (data.data.redirectTo && data.data.redirectTo !== '/dashboard') {
+            redirectPath = data.data.redirectTo;
+          }
+
+          setTimeout(() => {
+            window.location.href = redirectPath;
+          }, 1000);
+        }
+      } else {
         // Signup with multi-step data
         const formData = new FormData();
         
@@ -356,9 +436,19 @@ if (isLogin) {
           formData.append('productCategories', JSON.stringify(productCategories));
           formData.append('gstNumber', sellerGstNumber);
           formData.append('panNumber', sellerPanNumber);
-          formData.append('bankAccountNumber', bankAccountNumber);
-          formData.append('bankIfscCode', bankIfscCode);
-          formData.append('bankName', bankName);
+          
+          // ✅ FIX: Combine bank fields into a single JSON object `bank_details`
+          const bankDetails = {
+            accountNumber: bankAccountNumber,
+            ifscCode: bankIfscCode,
+            bankName: bankName
+          };
+          formData.append('bank_details', JSON.stringify(bankDetails));
+          
+          // ✅ FIX: Use field names that match the backend multer configuration
+          if (sellerGstCert) formData.append('gstCertificate', sellerGstCert);
+          if (sellerPanCard) formData.append('panCard', sellerPanCard);
+          if (sellerBankProof) formData.append('bankProof', sellerBankProof);
         }
 
         const response = await fetch(`${API_URL}/auth/register`, {
@@ -391,12 +481,33 @@ if (isLogin) {
     }
   };
 
-  const nextStep = () => setRegStep(prev => prev + 1);
+  const nextStep = () => {
+    if (validateStep(regStep)) {
+      setRegStep(prev => prev + 1);
+    }
+  };
+
   const prevStep = () => setRegStep(prev => prev - 1);
 
-  const addCategory = () => {
-    // This would be implemented with an input field
+  const toggleCategory = (cat: string) => {
+    if (productCategories.includes(cat)) {
+      setProductCategories(productCategories.filter(c => c !== cat));
+    } else {
+      setProductCategories([...productCategories, cat]);
+    }
   };
+
+  // Dynamic step labels and total steps
+  const getStepLabels = () => {
+    if (userType === 'enterprise') {
+      return ['Basic', 'Contact', 'Business', 'Documents'];
+    } else if (userType === 'seller') {
+      return ['Shop Info', 'Contact', 'Financial', 'Documents'];
+    }
+    return [];
+  };
+
+  const totalSteps = userType === 'enterprise' ? 4 : userType === 'seller' ? 4 : 0;
 
   return (
     <div className={`min-h-screen font-sans transition-all duration-500 ${
@@ -533,6 +644,7 @@ if (isLogin) {
                 src={carouselImages[currentSlide].url}
                 alt={carouselImages[currentSlide].title}
                 fill
+                sizes="50vw" // ✅ FIX: Added sizes attribute to eliminate warning
                 className="object-cover"
                 priority={currentSlide === 0}
               />
@@ -711,7 +823,6 @@ if (isLogin) {
                               ? "bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800"
                               : "bg-white/50 border border-gray-200/50 hover:bg-white"
                         }`}>
-                          {/* 3D Hover Effect */}
                           <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br ${option.gradient} blur-xl`} />
                           
                           <div className="relative z-10">
@@ -768,6 +879,12 @@ if (isLogin) {
                     onClick={() => {
                       setIsLogin(idx === 0);
                       setRegStep(1);
+                      setErrors({ 
+                        name: "", email: "", password: "", confirmPassword: "", terms: "",
+                        registrationNumber: "", contactPerson: "", contactPhone: "", phone: "",
+                        shopAddress: "", panNumber: "", gstNumber: "", bankAccountNumber: "",
+                        bankIfscCode: "", sellerPhone: "", ownerName: "", shopName: ""
+                      });
                     }}
                     className={`flex-1 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                       (idx === 0 && isLogin) || (idx === 1 && !isLogin)
@@ -794,7 +911,7 @@ if (isLogin) {
                     <div className="relative">
                       <div className="absolute top-4 left-0 w-full h-0.5 bg-gray-200 dark:bg-gray-700" />
                       <div className="relative flex justify-between">
-                        {[1, 2, 3, 4].map((step) => (
+                        {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
                           <div key={step} className="flex flex-col items-center">
                             <motion.div
                               animate={{ scale: regStep >= step ? 1.1 : 1 }}
@@ -809,10 +926,7 @@ if (isLogin) {
                             <span className={`text-[10px] mt-1 ${
                               regStep >= step ? 'text-emerald-500' : isDarkMode ? 'text-gray-600' : 'text-gray-400'
                             }`}>
-                              {step === 1 && 'Basic'}
-                              {step === 2 && 'Contact'}
-                              {step === 3 && 'Business'}
-                              {step === 4 && 'Documents'}
+                              {getStepLabels()[step - 1]}
                             </span>
                           </div>
                         ))}
@@ -973,9 +1087,6 @@ if (isLogin) {
                               : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         } outline-none`}
                       />
-                      {errors.name && (
-                        <p className="text-xs text-red-500 mt-1">{errors.name}</p>
-                      )}
                     </div>
 
                     {/* Phone */}
@@ -1359,7 +1470,7 @@ if (isLogin) {
                       />
                     </div>
 
-                    {/* Password for Enterprise - Now visible */}
+                    {/* Password for Enterprise */}
                     <div>
                       <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
                         Password <span className="text-emerald-500">*</span>
@@ -1479,10 +1590,10 @@ if (isLogin) {
                         onChange={(e) => setCompanyWebsite(e.target.value)}
                         placeholder="https://example.com"
                         className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
-                          isDarkMode
-                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
-                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
-                        } outline-none`}
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
                       />
                     </div>
 
@@ -1719,8 +1830,555 @@ if (isLogin) {
                   </motion.div>
                 )}
 
-                {/* Seller Registration Steps would go here - similar structure */}
-                {/* ... */}
+                {/* Seller Registration - Step 1: Shop Info */}
+                {!isLogin && userType === 'seller' && regStep === 1 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Shop Information</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Shop Name <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={shopName}
+                          onChange={(e) => {
+                            setShopName(e.target.value);
+                            clearFieldError("shopName");
+                          }}
+                          placeholder="Shop name"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.shopName
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Owner Name <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={ownerName}
+                          onChange={(e) => {
+                            setOwnerName(e.target.value);
+                            clearFieldError("ownerName");
+                          }}
+                          placeholder="Owner name"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.ownerName
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Shop Type
+                      </label>
+                      <select
+                        value={shopType}
+                        onChange={(e) => setShopType(e.target.value)}
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          isDarkMode
+                            ? "bg-gray-800/50 border-gray-700 text-white focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      >
+                        <option value="">Select shop type</option>
+                        <option value="handicraft">Handicraft</option>
+                        <option value="silk">Silk & Textiles</option>
+                        <option value="coffee">Coffee & Spices</option>
+                        <option value="sandalwood">Sandalwood</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Established Year
+                        </label>
+                        <input
+                          type="number"
+                          value={sellerEstablishedYear}
+                          onChange={(e) => setSellerEstablishedYear(e.target.value)}
+                          placeholder="YYYY"
+                          min="1800"
+                          max={new Date().getFullYear()}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Business Description
+                        </label>
+                        <input
+                          type="text"
+                          value={businessDescription}
+                          onChange={(e) => setBusinessDescription(e.target.value)}
+                          placeholder="Brief description"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Product Categories
+                      </label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {['Handicrafts', 'Textiles', 'Spices', 'Art', 'Souvenirs'].map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => toggleCategory(cat)}
+                            className={`px-3 py-1 rounded-full text-xs transition-all duration-300 ${
+                              productCategories.includes(cat)
+                                ? 'bg-emerald-500 text-white'
+                                : isDarkMode
+                                  ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Seller Registration - Step 2: Contact Info */}
+                {!isLogin && userType === 'seller' && regStep === 2 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Contact Information</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Phone <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          value={sellerPhone}
+                          onChange={(e) => {
+                            setSellerPhone(e.target.value);
+                            clearFieldError("sellerPhone");
+                          }}
+                          placeholder="Phone number"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.sellerPhone
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Alternate Phone
+                        </label>
+                        <input
+                          type="tel"
+                          value={sellerAlternatePhone}
+                          onChange={(e) => setSellerAlternatePhone(e.target.value)}
+                          placeholder="Alternate phone"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Shop Address <span className="text-emerald-500">*</span>
+                      </label>
+                      <textarea
+                        value={shopAddress}
+                        onChange={(e) => {
+                          setShopAddress(e.target.value);
+                          clearFieldError("shopAddress");
+                        }}
+                        placeholder="Full shop address"
+                        rows={2}
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          errors.shopAddress
+                            ? isDarkMode
+                              ? "border-red-500/50 bg-red-500/10"
+                              : "border-red-300 bg-red-50"
+                            : isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          City
+                        </label>
+                        <input
+                          type="text"
+                          value={sellerCity}
+                          onChange={(e) => setSellerCity(e.target.value)}
+                          placeholder="City"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          State
+                        </label>
+                        <input
+                          type="text"
+                          value={sellerState}
+                          onChange={(e) => setSellerState(e.target.value)}
+                          placeholder="State"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Pincode
+                        </label>
+                        <input
+                          type="text"
+                          value={sellerPincode}
+                          onChange={(e) => setSellerPincode(e.target.value)}
+                          placeholder="Pincode"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Email Address <span className="text-emerald-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Enter your email"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          errors.email
+                            ? isDarkMode
+                              ? "border-red-500/50 bg-red-500/10"
+                              : "border-red-300 bg-red-50"
+                            : isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Password <span className="text-emerald-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={passwordVisible ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.password
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none pr-12`}
+                          placeholder="Enter your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPasswordVisible(!passwordVisible)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-emerald-500"
+                        >
+                          {passwordVisible ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Seller Registration - Step 3: Financial Info */}
+                {!isLogin && userType === 'seller' && regStep === 3 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Financial Information</h3>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          GST Number
+                        </label>
+                        <input
+                          type="text"
+                          value={sellerGstNumber}
+                          onChange={(e) => setSellerGstNumber(e.target.value)}
+                          placeholder="GST number"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          PAN Number
+                        </label>
+                        <input
+                          type="text"
+                          value={sellerPanNumber}
+                          onChange={(e) => setSellerPanNumber(e.target.value)}
+                          placeholder="PAN number"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            isDarkMode
+                              ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                              : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        placeholder="Bank name"
+                        className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                          isDarkMode
+                            ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                            : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        } outline-none`}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          Account Number <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={bankAccountNumber}
+                          onChange={(e) => {
+                            setBankAccountNumber(e.target.value);
+                            clearFieldError("bankAccountNumber");
+                          }}
+                          placeholder="Account number"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.bankAccountNumber
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-xs mb-2 font-medium ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
+                          IFSC Code <span className="text-emerald-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={bankIfscCode}
+                          onChange={(e) => {
+                            setBankIfscCode(e.target.value);
+                            clearFieldError("bankIfscCode");
+                          }}
+                          placeholder="IFSC code"
+                          className={`w-full px-4 py-3 rounded-xl text-sm transition-all duration-300 border ${
+                            errors.bankIfscCode
+                              ? isDarkMode
+                                ? "border-red-500/50 bg-red-500/10"
+                                : "border-red-300 bg-red-50"
+                              : isDarkMode
+                                ? "bg-gray-800/50 border-gray-700 text-white placeholder-gray-500 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/20"
+                                : "bg-white/50 border-gray-200 text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                          } outline-none`}
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Seller Registration - Step 4: Documents */}
+                {!isLogin && userType === 'seller' && regStep === 4 && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <h3 className="text-lg font-medium mb-4">Upload Documents (Optional)</h3>
+                    
+                    <p className={`text-xs mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      Upload scanned copies for faster verification
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* GST Certificate */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        sellerGstCert
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setSellerGstCert(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">📑</span>
+                            <span className="text-xs font-medium">GST Certificate</span>
+                            {sellerGstCert ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* PAN Card */}
+                      <div className={`p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        sellerPanCard
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setSellerPanCard(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">🆔</span>
+                            <span className="text-xs font-medium">PAN Card</span>
+                            {sellerPanCard ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Bank Proof */}
+                      <div className={`col-span-2 p-4 rounded-xl border-2 border-dashed transition-all duration-300 cursor-pointer ${
+                        sellerBankProof
+                          ? isDarkMode
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-emerald-500 bg-emerald-50"
+                          : isDarkMode
+                            ? "border-gray-700 hover:border-emerald-500/50"
+                            : "border-gray-200 hover:border-emerald-500"
+                      }`}>
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept=".pdf,.jpg,.png"
+                            className="hidden"
+                            onChange={(e) => setSellerBankProof(e.target.files?.[0] || null)}
+                          />
+                          <div className="flex flex-col items-center gap-2 text-center">
+                            <span className="text-3xl">🏦</span>
+                            <span className="text-xs font-medium">Bank Proof (Cancelled Cheque)</span>
+                            {sellerBankProof ? (
+                              <span className="text-[10px] text-emerald-500">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-[10px] text-gray-500">Click to upload</span>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
 
                 {/* Navigation Buttons for Enterprise/Seller */}
                 {!isLogin && (userType === 'enterprise' || userType === 'seller') && (
@@ -1741,7 +2399,7 @@ if (isLogin) {
                       </motion.button>
                     )}
                     
-                    {regStep < (userType === 'enterprise' ? 3 : 4) ? (
+                    {regStep < totalSteps ? (
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -1879,7 +2537,12 @@ if (isLogin) {
                     setIsLogin(!isLogin);
                     setShowSuccess(false);
                     setRegStep(1);
-                    setErrors({ name: "", email: "", password: "", confirmPassword: "", terms: "", registrationNumber: "", contactPerson: "", contactPhone: "", phone: "", shopAddress: "", panNumber: "", gstNumber: "", bankAccountNumber: "", bankIfscCode: "" });
+                    setErrors({ 
+                      name: "", email: "", password: "", confirmPassword: "", terms: "",
+                      registrationNumber: "", contactPerson: "", contactPhone: "", phone: "",
+                      shopAddress: "", panNumber: "", gstNumber: "", bankAccountNumber: "",
+                      bankIfscCode: "", sellerPhone: "", ownerName: "", shopName: ""
+                    });
                   }}
                   className="text-emerald-400 hover:text-emerald-500 font-medium relative group"
                 >

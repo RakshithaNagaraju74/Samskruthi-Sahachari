@@ -57,6 +57,7 @@ export interface HeritageSite {
   // Arrays
   tags: string[];
   highlights: string[];
+  pickup_points: string[];   // NEW FIELD: pickup points for booking
   
   // Timestamps
   created_at: string;
@@ -85,6 +86,16 @@ export interface Review {
   helpful_count: number;
   created_at: string;
   updated_at?: string;
+}
+
+// NEW: Product interface for site‑associated products
+export interface SiteProduct {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  thumbnail: string | null;
+  seller_shop_name: string;
 }
 
 export interface ApiResponse<T> {
@@ -175,6 +186,7 @@ function normalizeSiteData(site: any): HeritageSite {
     // Arrays
     tags: site.tags || [],
     highlights: site.highlights || [],
+    pickup_points: site.pickup_points || [],   // NEW FIELD
     
     // Metadata
     created_at: site.created_at,
@@ -252,6 +264,20 @@ export const heritageService = {
     } catch (error) {
       console.error(`Error fetching site ${id}:`, error);
       return null;
+    }
+  },
+
+  // NEW: Get products associated with a site
+  getSiteProducts: async (siteId: number): Promise<SiteProduct[]> => {
+    try {
+      const response = await api.get<ApiResponse<SiteProduct[]>>(`/heritage/sites/${siteId}/products`);
+      if (response.data && response.data.success) {
+        return response.data.data || [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching site products:', error);
+      return [];
     }
   },
 
@@ -495,6 +521,20 @@ export const heritageService = {
     }
   },
 
+  getRecommended: async (categories: string[]): Promise<HeritageSite[]> => {
+    try {
+        const catString = categories.join(',');
+        const response = await api.get(`/heritage/recommended?categories=${catString}`);
+        if (response.data.success) {
+            return response.data.data.map((site: any) => normalizeSiteData(site));
+        }
+        return [];
+    } catch (error) {
+        console.error('Error fetching recommended sites:', error);
+        return [];
+    }
+  },
+
   /**
    * Get site statistics
    */
@@ -563,5 +603,5 @@ export const heritageService = {
    */
   normalizeSite: (site: any): HeritageSite => {
     return normalizeSiteData(site);
-  }
+  },
 };

@@ -58,7 +58,86 @@ const categories = [
   { id: "beach", name: "Beaches", icon: "🏖️", color: "from-cyan-500 to-blue-500", gradient: "from-cyan-400 to-blue-600" },
   { id: "wildlife", name: "Wildlife", icon: "🐘", color: "from-green-500 to-emerald-500", gradient: "from-green-400 to-emerald-600" },
 ];
+ const siteImages: Record<string, string> = {
+  'Mysore Palace': '/images/mysore-palace.jpeg',
+  'Hampi Group of Monuments': '/images/hampi.jpeg',
+  'Coorg': '/images/coorg.jpeg',
+  'Gokarna': '/images/gokarna.jpeg',
+  'Kabini Wildlife Sanctuary': '/images/kabini.jpeg',
+  'Hoysaleswara Temple': '/images/hoysaleswara-temple.jpg',
+  'Badami Cave Temples': '/images/badami.jpeg',
+  'Pattadakal Group of Temples': '/images/pattadakal.jpeg',
+  'Chennakesava Temple': '/images/chennakesava-temple.jpg',
+  'Shravanabelagola': '/images/shravanabelagola.jpeg',
+  'Jog Falls': '/images/jog-falls.jpeg',
+  'Murudeshwar Temple': '/images/murdeshwar.jpeg',
+  'Bangalore Palace': '/images/bangalore-palace.jpg',
+  'Bidar Fort': '/images/bidar-fort.jpg',
+  'Chitradurga Fort': '/images/chitradurga-fort.jpg',
+  'Tipu Sultan\'s Summer Palace': '/images/tipu-summer-palace.jpg',
+  'Gulbarga Fort': '/images/gulbarga-fort.jpg',
+  'Srirangapatna Fort': '/images/srirangapatna-fort.jpg',
+  'Devanahalli Fort': '/images/devanahalli-fort.jpg',
+  'Madhugiri Fort': '/images/madhugiri-fort.jpg',
+  'Savandurga': '/images/savandurga.jpg',
+  'Dambal': '/images/dambal.jpg',
+  'Siddhesvara Temple': '/images/siddhesvara-temple.jpg',
+  'Balligavi': '/images/balligavi.jpeg',
+  'Aihole Temple Complex': '/images/aihole.jpg',
+  'Kittur Fort': '/images/kittur-fort.jpeg',
+  'Mahakuta Temples': '/images/mahakuta-temples.jpeg',
+  'Humcha Jain Temple': '/images/humcha-jain-temple.jpeg',
+  'Queen\'s Bath': '/images/queens-bath.jpeg',
+  'Archaeological Museum': '/images/archaeological-museum.jpg',
+  'Folklore Museum': '/images/folklore-museum.jpeg',
+  'Makalidurga': '/images/makalidurga.jpeg',
+  'Talakadu Temples': '/images/talakadu-temples.jpg',
+  'Banashankari Temple': '/images/banashankari-temple.jpg',
+  'Royal Stepwells (Pushkarni)': '/images/royal-stepwells.jpeg',
+  'Government Museum': '/images/government-museum.jpg',
+  'Karnataka Temple Tour': '/images/karnataka-temple-tour.jpeg',
+  'Mysore Palace Light & Sound Show': '/images/mysore-palace.jpg',
+  'Gokarna Water Sports Center': '/images/gokarna-water-sports.jpg',
+  'Hampi Heritage Walk': '/images/hampi-heritage-walk.jpg',
+  'Kabini Bird Watching Expedition': '/images/kabini-bird-watching.webp',
+  'Kabini River Safari Camp': '/images/kabini-river-safari.jpeg',
+  'Coorg Coffee Plantation Stay': '/images/coorg-coffee-plantation.jpeg',
+  'Keshava Temple': '/images/keshava-temple.jpg',
+  'Mahabaleshwar Temple': '/images/mahabaleshwar-temple.jpg',
+  'Banavasi': '/images/banavasi.jpeg',
+  'Lakkundi Temple Complex': '/images/lakkundi.jpeg',
+  'Taj West End Garden': '/images/taj-west-end-garden.jpeg',
+  'Skandagiri (Kalavara Durga)': '/images/skandagiri.jpeg',
+  'Kavala Caves': '/images/kavala-caves.jpeg',
+  'Aihole Jain Caves': '/images/aihole.jpg',
+  'Sangolli Rayanna Fort': '/images/sangolli-rayanna-fort.webp',
+};
+// Helper to get the best available image URL for a site
+const getSiteImageUrl = (site: HeritageSite): string => {
+  // 1. Use the local mapping if available
+  if (site.name && siteImages[site.name]) {
+    return siteImages[site.name]; // e.g. '/images/mysore-palace.jpg'
+  }
 
+  // 2. If main_image exists, try to construct a valid URL
+  if (site.main_image) {
+    // If it's already a local path starting with '/images/', use it as is
+    if (site.main_image.startsWith('/images/')) {
+      return site.main_image;
+    }
+    // If it's a full URL (e.g., http://...), use it directly
+    if (site.main_image.startsWith('http')) {
+      return site.main_image;
+    }
+    // Otherwise, assume it's a relative path from the backend and prepend the base URL
+    const fixedPath = site.main_image.replace(/\\/g, '/');
+    return `http://localhost:5000/${fixedPath}`;
+  }
+
+  // 3. Fallback to the global placeholder
+  return PLACEHOLDER_IMAGE;
+};
+const PLACEHOLDER_IMAGE = '/images/placeholder.jpg';
 interface Ticket {
   id: number;
   ticket_number: string;
@@ -72,7 +151,15 @@ interface Ticket {
   used_at?: string;
   qr_code?: string;
 }
+interface PreferencesResponse {
+  success: boolean;
+  data: string[];
+}
 
+interface RecommendedResponse {
+  success: boolean;
+  data: HeritageSite[];
+}
 interface RecentActivity {
   id: number;
   site_id: number;
@@ -102,7 +189,31 @@ interface Achievement {
 }
 
 // Default placeholder image
-const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?w=800&auto=format&fit=crop';
+
+// Helper to safely construct image URL
+const getImageUrl = (path: string | null | undefined, siteName?: string): string => {
+  // If we have a custom mapping for this site, use it first
+  if (siteName && siteImages[siteName]) {
+    return siteImages[siteName];
+  }
+  
+  if (!path) return PLACEHOLDER_IMAGE;
+  
+  // If path starts with '/images/', it's a local public image
+  if (path.startsWith('/images/')) {
+    return path;
+  }
+  
+  // If it's already a full URL, use it
+  if (path.startsWith('http')) {
+    return path;
+  }
+  
+  // Handle Windows backslashes and relative paths from backend
+  const fixedPath = path.replace(/\\/g, '/');
+  const cleanPath = fixedPath.startsWith('/') ? fixedPath.substring(1) : fixedPath;
+  return `http://localhost:5000/${cleanPath}`;
+};
 
 export default function DashboardPage() {
   const { isDarkMode, toggleTheme } = useTheme();
@@ -249,6 +360,10 @@ export default function DashboardPage() {
     }
   ]);
 
+  // ============= NEW: Recommended Sites State =============
+  const [recommended, setRecommended] = useState<HeritageSite[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+
   // ============= Helper Functions =============
   const getUserIdFromToken = useCallback((): number | null => {
     try {
@@ -316,77 +431,7 @@ export default function DashboardPage() {
     console.log('🔄 Heritage sites ref updated with', heritageSites.length, 'sites');
     console.log('📋 All categories:', heritageSites.map(s => ({ name: s.name, category: s.category })));
   }, [heritageSites]);
-  // Filter and sort heritage sites
-useEffect(() => {
-  if (!heritageSites.length) {
-    setFilteredHeritageSites([]);
-    return;
-  }
-  
-  console.log('🔍 ===== FILTERING =====');
-  console.log('🔍 Total sites before filter:', heritageSites.length);
-  console.log('🔍 Site 62 present before filter:', heritageSites.some(s => s.id === 62) ? 'YES ✅' : 'NO ❌');
-  console.log('🔍 Current filters:', { searchQuery, selectedCategory, mapView, sortBy });
-  
-  let filtered = [...heritageSites];
-  
-  // Search filter
-  if (searchQuery && searchQuery.trim() !== '') {
-    filtered = filtered.filter(site => 
-      site.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      site.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (site.district && site.district.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (site.tags && site.tags.some((tag: string) => tag.toLowerCase().includes(searchQuery.toLowerCase())))
-    );
-    console.log('🔍 After search filter:', filtered.length);
-  }
-  
-  // Category filter
-  if (selectedCategory !== "all") {
-    filtered = filtered.filter(site => 
-      site.category && site.category.toLowerCase() === selectedCategory.toLowerCase()
-    );
-    console.log('🔍 After category filter:', filtered.length);
-  }
 
-  // Map view filter
-  if (mapView !== "all") {
-    filtered = filtered.filter(site => 
-      site.category && site.category.toLowerCase() === mapView.toLowerCase()
-    );
-    console.log('🔍 After map view filter:', filtered.length);
-  }
-
-  // Check if site 62 survived the filters
-  const site62AfterFilter = filtered.find(s => s.id === 62);
-  console.log('🔍 Site 62 after filters:', site62AfterFilter ? 'YES ✅' : 'NO ❌');
-  
-  if (!site62AfterFilter && heritageSites.some(s => s.id === 62)) {
-    console.log('🔍 Site 62 was FILTERED OUT!');
-    const site62 = heritageSites.find(s => s.id === 62);
-    if (site62) {
-      console.log('   - site.category:', site62.category);
-      console.log('   - selectedCategory:', selectedCategory);
-      console.log('   - mapView:', mapView);
-      console.log('   - matches category?', site62.category?.toLowerCase() === selectedCategory.toLowerCase());
-      console.log('   - matches mapView?', site62.category?.toLowerCase() === mapView.toLowerCase());
-    }
-  }
-
-  // Sort
-  filtered.sort((a, b) => {
-    if (sortBy === "name") {
-      return a.name.localeCompare(b.name);
-    } else if (sortBy === "price") {
-      return (a.entry_fee_indian || 0) - (b.entry_fee_indian || 0);
-    } else {
-      return (b.rating || 0) - (a.rating || 0);
-    }
-  });
-  
-  setFilteredHeritageSites(filtered);
-  console.log('🔍 Final filtered count:', filtered.length);
-}, [searchQuery, selectedCategory, mapView, sortBy, heritageSites]);
   // Set greeting
   useEffect(() => {
     const hour = new Date().getHours();
@@ -739,6 +784,38 @@ useEffect(() => {
     }
   }, [getUserIdFromToken, updateAchievements]);
 
+  // ============= NEW: Preferences & Recommendations =============
+  useEffect(() => {
+  const checkPreferences = async () => {
+    if (!user) return;
+    // Only regular users need preferences
+    if (user.role === 'user') {
+      try {
+        const res = await api.get<PreferencesResponse>('/user/preferences');
+        if (res.data.success) {
+          const prefs = res.data.data;
+          if (prefs.length === 0) {
+            router.push('/preferences');
+            return;
+          }
+          // Fetch recommended sites
+          setLoadingRecs(true);
+          const catString = prefs.join(',');
+          const recRes = await api.get<RecommendedResponse>(`/heritage/recommended?categories=${catString}`);
+          if (recRes.data.success) {
+            setRecommended(recRes.data.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching preferences:', error);
+      } finally {
+        setLoadingRecs(false);
+      }
+    }
+  };
+  checkPreferences();
+}, [user, router]);
+
   // ============= CRITICAL FIX: Separate concerns =============
   
   // 1️⃣ Fetch heritage sites IMMEDIATELY on mount (PUBLIC DATA)
@@ -1078,6 +1155,35 @@ useEffect(() => {
             </motion.div>
           )}
 
+          {/* ===== NEW: Edit Preferences Link for Users ===== */}
+          {!isLeftSidebarCollapsed && user?.role === 'user' && (
+            <Link
+              href="/preferences"
+              className="flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-all duration-300 hover:bg-gray-800/50 hover:text-white mb-4"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Edit Preferences</span>
+            </Link>
+          )}
+
+          {/* For collapsed sidebar, show just the icon with tooltip */}
+          {isLeftSidebarCollapsed && user?.role === 'user' && (
+            <Link
+              href="/preferences"
+              className="flex justify-center items-center w-10 h-10 mx-auto rounded-lg text-sm transition-all duration-300 hover:bg-gray-800/50 hover:text-white mb-4"
+              title="Edit Preferences"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </Link>
+          )}
+          {/* ================================================= */}
+
           <div className={`flex items-center ${isLeftSidebarCollapsed ? 'justify-center' : 'gap-3'} p-3 rounded-xl ${
             isDarkMode ? "bg-gray-800/50" : "bg-white/50"
           }`}>
@@ -1266,6 +1372,51 @@ useEffect(() => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
+                {/* ============= NEW: Recommended Section ============= */}
+                {user?.role === 'user' && (
+                  <section className="mb-12">
+                    <h2 className="text-2xl font-light mb-6">Recommended for you</h2>
+                    {loadingRecs ? (
+                      <div className="flex justify-center py-8">
+                        <div className="w-8 h-8 border-2 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
+                      </div>
+                    ) : recommended.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {recommended.map(site => {
+  const imageUrl = getImageUrl(site.main_image, site.name);
+  console.log(`Recommended site ${site.name}: image URL =`, imageUrl);
+  return (
+    <Link key={site.id} href={`/dashboard/heritage/${site.id}`}>
+      <div className="group relative h-64 rounded-xl overflow-hidden">
+        <Image 
+          src={imageUrl}
+          alt={site.name}
+          fill
+          className="object-cover group-hover:scale-110 transition"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = PLACEHOLDER_IMAGE;
+          }}
+          unoptimized
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+        <div className="absolute bottom-4 left-4 text-white">
+          <h3 className="text-lg font-medium">{site.name}</h3>
+          <p className="text-sm opacity-80">{site.location}</p>
+        </div>
+      </div>
+    </Link>
+  );
+})}
+                      </div>
+                    ) : (
+                      <p className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        No recommendations yet. Try adjusting your preferences.
+                      </p>
+                    )}
+                  </section>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -1532,7 +1683,7 @@ useEffect(() => {
                         lat: site.latitude || 12.9716,
                         lng: site.longitude || 77.5946 
                       },
-                      image: site.main_image || PLACEHOLDER_IMAGE,
+                      image: getImageUrl(site.main_image),
                       price: site.entry_fee_indian ? `₹${site.entry_fee_indian}` : 'Free',
                       visited: site.visited || false,
                       booked: site.booked || false
@@ -2163,27 +2314,18 @@ interface CardProps {
 function FeaturedCard({ destination, isDarkMode, onClick }: CardProps) {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [imageSrc, setImageSrc] = useState<string>('');
-
-  const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?w=800&auto=format&fit=crop';
-
-  useEffect(() => {
-    if (destination.main_image) {
-      // Fix backslashes in the URL
-      const fixedPath = destination.main_image.replace(/\\/g, '/');
-      // Construct the full URL
-      const fullUrl = `http://localhost:5000/${fixedPath}`;
-      setImageSrc(fullUrl);
-    } else {
-      setImageSrc(PLACEHOLDER_IMAGE);
-    }
-  }, [destination.main_image]);
+  const [imageSrc, setImageSrc] = useState<string>(PLACEHOLDER_IMAGE);
 
   const rating = typeof destination.rating === 'number' ? destination.rating : 4.5;
   const displayPrice = destination.entry_fee_indian ? `₹${destination.entry_fee_indian}` : 'Free';
 
+  useEffect(() => {
+    // Reset error state when destination changes
+    setImageError(false);
+    setImageSrc(getSiteImageUrl(destination));
+  }, [destination]);
+
   const handleImageError = () => {
-    console.log('Image failed to load:', imageSrc);
     setImageError(true);
     setImageSrc(PLACEHOLDER_IMAGE);
   };
@@ -2205,6 +2347,7 @@ function FeaturedCard({ destination, isDarkMode, onClick }: CardProps) {
         sizes="(max-width: 768px) 100vw, 33vw"
         className="object-cover group-hover:scale-110 transition-transform duration-700"
         onError={handleImageError}
+        unoptimized // ← ADD THIS
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
       
@@ -2247,27 +2390,17 @@ function FeaturedCard({ destination, isDarkMode, onClick }: CardProps) {
 
 function PopularCard({ destination, isDarkMode, onClick }: CardProps) {
   const [imageError, setImageError] = useState(false);
-  const [imageSrc, setImageSrc] = useState<string>('');
-
-  const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1590523277543-94a1e8e96b32?w=800&auto=format&fit=crop';
-
-  useEffect(() => {
-    if (destination.main_image) {
-      // Fix backslashes in the URL
-      const fixedPath = destination.main_image.replace(/\\/g, '/');
-      // Construct the full URL
-      const fullUrl = `http://localhost:5000/${fixedPath}`;
-      setImageSrc(fullUrl);
-    } else {
-      setImageSrc(PLACEHOLDER_IMAGE);
-    }
-  }, [destination.main_image]);
+  const [imageSrc, setImageSrc] = useState<string>(PLACEHOLDER_IMAGE);
 
   const rating = typeof destination.rating === 'number' ? destination.rating : 4.5;
   const displayPrice = destination.entry_fee_indian ? `₹${destination.entry_fee_indian}` : 'Free';
 
+  useEffect(() => {
+    setImageError(false);
+    setImageSrc(getSiteImageUrl(destination));
+  }, [destination]);
+
   const handleImageError = () => {
-    console.log('Image failed to load:', imageSrc);
     setImageError(true);
     setImageSrc(PLACEHOLDER_IMAGE);
   };
@@ -2290,6 +2423,7 @@ function PopularCard({ destination, isDarkMode, onClick }: CardProps) {
           sizes="(max-width: 768px) 50vw, 25vw"
           className="object-cover group-hover:scale-110 transition-transform duration-500"
           onError={handleImageError}
+          unoptimized // ← ADD THIS
         />
         {destination.is_unesco && (
           <div className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full">

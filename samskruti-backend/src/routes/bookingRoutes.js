@@ -1,9 +1,9 @@
-// src/routes/bookingRoutes.js
 const express = require('express');
 const router = express.Router();
 const Booking = require('../models/Booking');
 const Ticket = require('../models/Ticket');
 const { authMiddleware } = require('../middlewares/authMiddleware');
+const db = require('../config/database');
 
 // Get user's bookings
 router.get('/user', authMiddleware, async (req, res)=> {
@@ -153,20 +153,74 @@ router.get('/reference/:reference', authMiddleware, async (req, res) => {
     }
 });
 
-// Create booking
+// Create booking (updated to handle promo code)
+// Create booking (updated to handle promo code)
 router.post('/', authMiddleware, async (req, res) => {
+    const client = await db.pool.connect(); // if using pool, otherwise use db directly
     try {
+        await client.query('BEGIN');
+
         const {
             site_id,
             enterprise_id,
             travel_date,
             travelers,
             special_requests,
-            total_amount
+            total_amount,
+            pickup_point,
+            promo_code
         } = req.body;
 
         // Generate booking reference
         const booking_reference = 'BK' + Date.now() + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+        let finalTotal = total_amount;
+        let discountAmount = 0;
+        let influencerCommission = 0;
+        let promoCodeId = null;
+
+        // If promo code provided, validate it
+        if (promo_code) {
+            console.log('🔍 Processing promo code:', promo_code);
+            const promoQuery = await client.query(`
+                SELECT 
+                    pc.*,
+                    i.commission_rate
+                FROM promo_codes pc
+                JOIN influencers i ON pc.influencer_id = i.id
+                WHERE pc.code = $1 
+                  AND pc.is_active = true 
+                  AND pc.valid_from <= CURRENT_DATE 
+                  AND pc.valid_to >= CURRENT_DATE
+            `, [promo_code]);
+
+            if (promoQuery.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, message: 'Invalid or expired promo code' });
+            }
+
+            const promo = promoQuery.rows[0];
+            console.log('✅ Promo found:', promo);
+
+            // Check usage limit
+            if (promo.usage_limit && promo.times_used >= promo.usage_limit) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, message: 'Promo code usage limit exceeded' });
+            }
+
+            // Calculate discount
+            if (promo.discount_type === 'percentage') {
+                discountAmount = (total_amount * promo.discount_value) / 100;
+            } else {
+                discountAmount = promo.discount_value;
+            }
+
+            if (discountAmount > total_amount) discountAmount = total_amount;
+
+            finalTotal = total_amount - discountAmount;
+            influencerCommission = (finalTotal * promo.commission_rate) / 100;
+            promoCodeId = promo.id;
+        }
 
         const bookingData = {
             user_id: req.user.id,
@@ -175,24 +229,49 @@ router.post('/', authMiddleware, async (req, res) => {
             travel_date,
             travelers,
             special_requests,
-            total_amount,
-            booking_reference
+            total_amount: finalTotal,
+            booking_reference,
+            pickup_point: pickup_point || null,
+            promo_code_id: promoCodeId,
+            discount_amount: discountAmount,
+            influencer_commission: influencerCommission
         };
 
         const booking = await Booking.create(bookingData);
 
+        // If promo code was used, update its times_used and influencer's total_earnings
+        if (promoCodeId) {
+            console.log('📈 Updating promo code usage for ID:', promoCodeId);
+            await client.query(
+                'UPDATE promo_codes SET times_used = times_used + 1, updated_at = NOW() WHERE id = $1',
+                [promoCodeId]
+            );
+
+            const promoInfo = await client.query('SELECT influencer_id FROM promo_codes WHERE id = $1', [promoCodeId]);
+            if (promoInfo.rows.length > 0) {
+                await client.query(
+                    'UPDATE influencers SET total_earnings = total_earnings + $1, updated_at = NOW() WHERE id = $2',
+                    [influencerCommission, promoInfo.rows[0].influencer_id]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
         res.status(201).json({
             success: true,
             message: 'Booking created successfully',
             data: booking
         });
     } catch (error) {
-        console.error('Error creating booking:', error);
+        await client.query('ROLLBACK');
+        console.error('❌ Error creating booking:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to create booking',
             error: error.message
         });
+    } finally {
+        client.release();
     }
 });
 

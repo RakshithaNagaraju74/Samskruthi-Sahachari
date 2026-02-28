@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const AuthController = require('../controllers/authController'); // This imports the class
+const AuthController = require('../controllers/authController');
 const { authMiddleware } = require('../middlewares/authMiddleware');
-const { validateRegistration, validateLogin } = require('../utils/validation');
+const { validateLogin } = require('../utils/validation');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -43,13 +43,14 @@ const upload = multer({
 });
 
 // Public routes
-router.post('/register', upload.fields([
+// Registration with user type parameter (user, enterprise, seller)
+router.post('/register/:userType', upload.fields([
   { name: 'registrationCert', maxCount: 1 },
   { name: 'gstCert', maxCount: 1 },
   { name: 'panCard', maxCount: 1 },
   { name: 'addressProof', maxCount: 1 },
   { name: 'bankStatement', maxCount: 1 }
-]), AuthController.register); // This should work with static method
+]), AuthController.register);
 
 router.post('/login', validateLogin, AuthController.login);
 router.post('/refresh-token', AuthController.refreshToken);

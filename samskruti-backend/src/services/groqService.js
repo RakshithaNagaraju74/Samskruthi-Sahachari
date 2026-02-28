@@ -16,6 +16,7 @@ Key Information:
 - You can check ticket status and alert about expiring tickets
 - You can recommend sites based on interests
 - You can answer questions about Karnataka heritage
+- You can create itineraries based on duration and location
 
 Be friendly, informative, and concise. Use emojis occasionally.`
             }
@@ -25,7 +26,7 @@ Be friendly, informative, and concise. Use emojis occasionally.`
     async chat(message, userContext = {}) {
         try {
             // Build context with user's data
-            const userDataPrompt = this.buildUserContextPrompt(userContext);
+            const userDataPrompt = await this.buildUserContextPrompt(userContext);
             
             const messages = [
                 ...this.context,
@@ -53,16 +54,63 @@ Be friendly, informative, and concise. Use emojis occasionally.`
         }
     }
 
-    buildUserContextPrompt(userContext) {
-        const { sites = [], tickets = [], stats = {} } = userContext;
-        
+    async buildUserContextPrompt(userContext) {
+        const { userId, message } = userContext;
+        const db = require('../config/database');
+
+        // Fetch user's tickets
+        const ticketsResult = await db.query(
+            `SELECT t.*, hs.name as site_name, hs.location 
+             FROM tickets t
+             JOIN heritage_sites hs ON t.site_id = hs.id
+             WHERE t.user_id = $1
+             ORDER BY t.created_at DESC`,
+            [userId]
+        );
+        const tickets = ticketsResult.rows;
+
+        // Fetch all active heritage sites (for reference)
+        const sitesResult = await db.query(
+            `SELECT id, name, location, district, category, site_type, 
+                    entry_fee_indian, rating, description, best_time_to_visit,
+                    duration_required, opening_time, closing_time
+             FROM heritage_sites
+             WHERE is_active = true
+             ORDER BY rating DESC NULLS LAST`
+        );
+        const sites = sitesResult.rows;
+
+        // Attempt to extract location and duration from the user's message (simple keyword matching)
+        const locationMatch = message.match(/\b(mysore|mysuru|bangalore|bengaluru|hampi|coorg|madikeri|gokarna|kabini|badami|aihole|pattadakal|belur|halebidu|srirangapatna)\b/i);
+        const location = locationMatch ? locationMatch[0] : null;
+
+        const durationMatch = message.match(/(\d+)\s*(day|days?)/i);
+        const duration = durationMatch ? parseInt(durationMatch[1]) : null;
+
         let prompt = 'CURRENT USER DATA:\n';
         
         if (sites.length > 0) {
-            prompt += `\nAvailable Heritage Sites (${sites.length}):\n`;
-            sites.slice(0, 10).forEach(site => {
-                prompt += `- ${site.name} (${site.category}): ${site.location}, Fee: ₹${site.entry_fee_indian || 'Free'}, Rating: ${site.rating || 'N/A'}\n`;
-            });
+            prompt += `\nAvailable Heritage Sites (${sites.length} total):\n`;
+            // If location is mentioned, show sites in that location first
+            let filteredSites = sites;
+            if (location) {
+                filteredSites = sites.filter(s => 
+                    s.location && s.location.toLowerCase().includes(location.toLowerCase())
+                );
+                if (filteredSites.length > 0) {
+                    prompt += `\nSites in ${location} (${filteredSites.length}):\n`;
+                    filteredSites.slice(0, 15).forEach(site => {
+                        prompt += `- ${site.name} (${site.category || 'heritage'}): ${site.location}, Fee: ₹${site.entry_fee_indian || 'Free'}, Rating: ${site.rating || 'N/A'}, Duration: ${site.duration_required || 'varies'}\n`;
+                    });
+                }
+            }
+            // Show top rated sites overall if no location match or after location list
+            if (!location || filteredSites.length === 0) {
+                prompt += `\nTop Rated Sites:\n`;
+                sites.slice(0, 20).forEach(site => {
+                    prompt += `- ${site.name} (${site.category || 'heritage'}): ${site.location}, Fee: ₹${site.entry_fee_indian || 'Free'}, Rating: ${site.rating || 'N/A'}, Duration: ${site.duration_required || 'varies'}\n`;
+                });
+            }
         }
 
         if (tickets.length > 0) {
@@ -87,6 +135,30 @@ Be friendly, informative, and concise. Use emojis occasionally.`
             }
         }
 
+        // If location and duration provided, suggest an itinerary
+        if (location && duration) {
+            prompt += `\nBased on your interest in ${location} for ${duration} days, consider this sample itinerary:\n`;
+            // Fetch sites in that location sorted by rating
+            const localSites = sites.filter(s => 
+                s.location && s.location.toLowerCase().includes(location.toLowerCase())
+            ).sort((a,b) => (b.rating || 0) - (a.rating || 0));
+
+            if (localSites.length > 0) {
+                for (let i = 0; i < Math.min(duration, localSites.length); i++) {
+                    prompt += `Day ${i+1}: ${localSites[i].name}`;
+                    if (localSites[i].duration_required) {
+                        prompt += ` (approx ${localSites[i].duration_required})`;
+                    }
+                    prompt += `\n`;
+                }
+                if (localSites.length > duration) {
+                    prompt += `You could also visit: ${localSites.slice(duration, duration+3).map(s => s.name).join(', ')}\n`;
+                }
+            } else {
+                prompt += `No specific sites found in ${location}. Consider exploring nearby districts or top‑rated sites.\n`;
+            }
+        }
+
         prompt += `\nPlease help the user with their query based on this data.`;
         
         return prompt;
@@ -94,7 +166,6 @@ Be friendly, informative, and concise. Use emojis occasionally.`
 
     async getSiteRecommendations(userId, preferences = {}) {
         try {
-            // This would typically query your database
             const db = require('../config/database');
             
             let query = `

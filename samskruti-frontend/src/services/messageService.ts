@@ -57,6 +57,19 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+// Interface for enterprise list response
+export interface EnterpriseListResponse {
+  success: boolean;
+  data: Array<{
+    id: number;
+    enterprise_name: string;
+    description?: string;
+    business_type?: string;
+    logo?: string;
+    location?: string;
+  }>;
+}
+
 export const messageService = {
   // Get user's conversations
   getUserConversations: async (): Promise<Conversation[]> => {
@@ -202,7 +215,7 @@ export const messageService = {
   // Get tourist details
   getTouristDetails: async (userId: number): Promise<any> => {
     try {
-      const response = await api.get<ApiResponse<any>>(`/user/profile/${userId}`);
+      const response = await api.get<ApiResponse<any>>(`/messages/tourist/${userId}`);
       if (response.data && response.data.success) {
         return response.data.data;
       }
@@ -210,6 +223,20 @@ export const messageService = {
     } catch (error) {
       console.error('Error fetching tourist details:', error);
       return null;
+    }
+  },
+
+  // Get all approved enterprises
+  getAllEnterprises: async (): Promise<EnterpriseListResponse['data']> => {
+    try {
+      const response = await api.get<EnterpriseListResponse>('/enterprise/all');
+      if (response.data && response.data.success) {
+        return response.data.data;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching enterprises:', error);
+      return [];
     }
   },
 

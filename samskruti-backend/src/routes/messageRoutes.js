@@ -61,7 +61,7 @@ router.post('/conversations/start', authMiddleware, async (req, res) => {
     }
 });
 
-// Get messages for a conversation
+// Get messages for a conversation (accessible by both user and enterprise)
 router.get('/conversations/:conversationId/messages', authMiddleware, async (req, res) => {
     try {
         const { conversationId } = req.params;
@@ -77,7 +77,12 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
             });
         }
         
-        if (conversation.user_id !== req.user.id && req.user.role !== 'admin') {
+        // Check if user is either the user or the enterprise in this conversation
+        const isUser = conversation.user_id === req.user.id;
+        const isEnterprise = conversation.enterprise_id === req.user.enterprise_id;
+        const isAdmin = req.user.role === 'admin';
+        
+        if (!isUser && !isEnterprise && !isAdmin) {
             return res.status(403).json({
                 success: false,
                 message: 'Unauthorized'
@@ -86,8 +91,12 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
         
         const messages = await Message.getMessages(conversationId, parseInt(limit), parseInt(offset));
         
-        // Mark messages as read
-        await Message.markAsRead(conversationId, req.user.id);
+        // Mark messages as read for the appropriate party
+        if (isUser) {
+            await Message.markAsRead(conversationId, req.user.id);
+        } else if (isEnterprise) {
+            await Message.markEnterpriseAsRead(conversationId, req.user.enterprise_id);
+        }
         
         res.json({
             success: true,
@@ -102,8 +111,7 @@ router.get('/conversations/:conversationId/messages', authMiddleware, async (req
     }
 });
 
-// Send a message
-// routes/messageRoutes.js
+// Send a message (as user)
 router.post('/conversations/:conversationId/messages', authMiddleware, async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -148,7 +156,7 @@ router.post('/conversations/:conversationId/messages', authMiddleware, async (re
   }
 });
 
-// Mark messages as read
+// Mark messages as read (user)
 router.put('/conversations/:conversationId/read', authMiddleware, async (req, res) => {
     try {
         const { conversationId } = req.params;
@@ -199,7 +207,7 @@ router.put('/conversations/:conversationId/archive', authMiddleware, async (req,
             });
         }
         
-        if (conversation.user_id !== req.user.id && req.user.role !== 'admin') {
+        if (conversation.user_id !== req.user.id && conversation.enterprise_id !== req.user.enterprise_id && req.user.role !== 'admin') {
             return res.status(403).json({
                 success: false,
                 message: 'Unauthorized'
@@ -230,8 +238,7 @@ router.put('/conversations/:conversationId/archive', authMiddleware, async (req,
 router.get('/enterprise/conversations', authMiddleware, async (req, res) => {
     try {
         // Check if user has enterprise_id in their profile
-        // You'll need to add enterprise_id to users table or have a separate mapping
-        const enterpriseId = req.user.enterprise_id; // Assuming this exists
+        const enterpriseId = req.user.enterprise_id;
         
         if (!enterpriseId && req.user.role !== 'admin') {
             return res.status(403).json({

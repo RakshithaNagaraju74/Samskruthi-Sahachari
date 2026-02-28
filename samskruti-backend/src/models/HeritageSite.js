@@ -41,6 +41,7 @@ class HeritageSite {
                     total_reviews,
                     tags,
                     highlights,
+                    pickup_points,
                     views,
                     created_at,
                     updated_at
@@ -50,9 +51,6 @@ class HeritageSite {
             `;
             
             const result = await db.query(query);
-            
-            console.log(`✅ Loaded ${result.rows.length} heritage sites`);
-            
             return result.rows;
         } catch (error) {
             console.error('Error getting heritage sites:', error);
@@ -100,6 +98,7 @@ class HeritageSite {
                     total_reviews,
                     tags,
                     highlights,
+                    pickup_points,
                     views,
                     created_at,
                     updated_at
@@ -108,10 +107,34 @@ class HeritageSite {
             `;
             
             const result = await db.query(query, [id]);
-            
             return result.rows[0] || null;
         } catch (error) {
             console.error('Error finding heritage site by ID:', error);
+            throw error;
+        }
+    }
+
+    // Get products associated with a site
+    static async getProducts(siteId) {
+        try {
+            const query = `
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.description,
+                    p.price,
+                    p.thumbnail,
+                    s.shop_name as seller_shop_name
+                FROM products p
+                JOIN site_products sp ON p.id = sp.product_id
+                JOIN sellers s ON p.seller_id = s.id
+                WHERE sp.site_id = $1 AND p.status = 'published'
+                ORDER BY p.name
+            `;
+            const result = await db.query(query, [siteId]);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching site products:', error);
             throw error;
         }
     }
@@ -189,7 +212,6 @@ class HeritageSite {
     static async search(searchTerm) {
         try {
             const term = `%${searchTerm.toLowerCase()}%`;
-            
             const query = `
                 SELECT * FROM heritage_sites
                 WHERE is_active = true AND (
@@ -311,7 +333,6 @@ class HeritageSite {
     // Get nearby sites
     static async getNearby(lat, lng, radius = 50) {
         try {
-            // Get all active sites with coordinates
             const query = `
                 SELECT * FROM heritage_sites
                 WHERE is_active = true 
@@ -321,9 +342,8 @@ class HeritageSite {
             
             const result = await db.query(query);
             
-            // Calculate distance using Haversine formula
+            // Haversine distance calculation
             const toRad = (value) => (value * Math.PI) / 180;
-            
             const sitesWithDistance = result.rows.map(site => {
                 const dLat = toRad(site.latitude - lat);
                 const dLon = toRad(site.longitude - lng);
@@ -332,8 +352,7 @@ class HeritageSite {
                     Math.cos(toRad(lat)) * Math.cos(toRad(site.latitude)) * 
                     Math.sin(dLon / 2) * Math.sin(dLon / 2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                const distance = 6371 * c; // Earth's radius in km
-                
+                const distance = 6371 * c; // km
                 return { ...site, distance };
             });
             
@@ -355,7 +374,6 @@ class HeritageSite {
                 WHERE district IS NOT NULL AND district != '' AND is_active = true
                 ORDER BY district ASC
             `;
-            
             const result = await db.query(query);
             return result.rows.map(row => row.district);
         } catch (error) {
@@ -373,7 +391,6 @@ class HeritageSite {
                 WHERE category IS NOT NULL AND category != '' AND is_active = true
                 ORDER BY category ASC
             `;
-            
             const result = await db.query(query);
             return result.rows.map(row => row.category);
         } catch (error) {
@@ -391,7 +408,6 @@ class HeritageSite {
                 WHERE site_type IS NOT NULL AND site_type != '' AND is_active = true
                 ORDER BY site_type ASC
             `;
-            
             const result = await db.query(query);
             return result.rows.map(row => row.site_type);
         } catch (error) {
@@ -403,78 +419,141 @@ class HeritageSite {
     // Increment view count
     static async incrementView(id) {
         try {
-            const query = `
-                UPDATE heritage_sites 
-                SET views = COALESCE(views, 0) + 1 
-                WHERE id = $1
-                RETURNING views
-            `;
-            
-            await db.query(query, [id]);
+            await db.query(
+                'UPDATE heritage_sites SET views = COALESCE(views, 0) + 1 WHERE id = $1',
+                [id]
+            );
         } catch (error) {
             console.error('Error incrementing view:', error);
             throw error;
         }
     }
 
-    // Create a new heritage site
+    // Create a new heritage site (with product associations)
     static async create(siteData) {
+        const client = await db.pool.connect(); // use a transaction
         try {
+            await client.query('BEGIN');
+
             const {
-                name, description, short_description,
-                location, district, state, latitude, longitude,
-                category, subcategory, site_type,
-                main_image, gallery_images,
-                built_in, built_by, architectural_style, significance,
-                entry_fee_indian, entry_fee_foreigner,
-                opening_time, closing_time, best_time_to_visit, duration_required,
-                contact_phone, contact_email, website,
                 enterprise_id,
-                is_unesco, is_featured, is_active,
-                tags, highlights
+                name,
+                location,
+                district,
+                state,
+                description,
+                short_description,
+                category,
+                subcategory,
+                site_type,
+                main_image,
+                gallery_images,
+                built_in,
+                built_by,
+                architectural_style,
+                significance,
+                entry_fee_indian,
+                entry_fee_foreigner,
+                opening_time,
+                closing_time,
+                best_time_to_visit,
+                duration_required,
+                contact_phone,
+                contact_email,
+                website,
+                is_unesco,
+                is_featured,
+                is_active,
+                tags,
+                highlights,
+                pickup_points,
+                product_ids,          // array of product IDs to associate
+                rating,
+                total_reviews,
+                views
             } = siteData;
 
-            const query = `
+            const insertQuery = `
                 INSERT INTO heritage_sites (
-                    name, description, short_description,
-                    location, district, state, latitude, longitude,
-                    category, subcategory, site_type,
-                    main_image, gallery_images,
-                    built_in, built_by, architectural_style, significance,
-                    entry_fee_indian, entry_fee_foreigner,
+                    enterprise_id, name, location, district, state,
+                    description, short_description, category, subcategory, site_type,
+                    main_image, gallery_images, built_in, built_by, architectural_style,
+                    significance, entry_fee_indian, entry_fee_foreigner,
                     opening_time, closing_time, best_time_to_visit, duration_required,
                     contact_phone, contact_email, website,
-                    enterprise_id,
                     is_unesco, is_featured, is_active,
-                    tags, highlights,
-                    views, created_at, updated_at
+                    tags, highlights, pickup_points,
+                    rating, total_reviews, views,
+                    created_at, updated_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                    $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-                    $24, $25, $26, $27, $28, $29, $30, $31, $32,
-                    0, NOW(), NOW()
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11, $12, $13, $14, $15, $16, $17, $18,
+                    $19, $20, $21, $22, $23, $24, $25,
+                    $26, $27, $28,
+                    $29::text[], $30::text[], $31::text[],
+                    $32, $33, $34,
+                    NOW(), NOW()
                 ) RETURNING *
             `;
 
             const values = [
-                name, description, short_description,
-                location, district, state, latitude, longitude,
-                category, subcategory, site_type,
-                main_image, gallery_images || [],
-                built_in, built_by, architectural_style, significance,
-                entry_fee_indian, entry_fee_foreigner,
-                opening_time, closing_time, best_time_to_visit, duration_required,
-                contact_phone, contact_email, website,
-                enterprise_id || null,
-                is_unesco || false, is_featured || false, is_active !== false,
-                tags || [], highlights || []
+                enterprise_id,
+                name,
+                location,
+                district,
+                state,
+                description,
+                short_description,
+                category,
+                subcategory,
+                site_type,
+                main_image,
+                gallery_images || [],
+                built_in,
+                built_by,
+                architectural_style,
+                significance,
+                entry_fee_indian,
+                entry_fee_foreigner,
+                opening_time,
+                closing_time,
+                best_time_to_visit,
+                duration_required,
+                contact_phone,
+                contact_email,
+                website,
+                is_unesco || false,
+                is_featured || false,
+                is_active !== false,
+                tags || [],
+                highlights || [],
+                pickup_points || [],
+                rating || 0,
+                total_reviews || 0,
+                views || 0
             ];
 
-            const result = await db.query(query, values);
-            return result.rows[0];
+            const result = await client.query(insertQuery, values);
+            const newSite = result.rows[0];
+
+            // Insert product associations if any
+            if (product_ids && product_ids.length > 0) {
+                for (const productId of product_ids) {
+                    await client.query(
+                        'INSERT INTO site_products (site_id, product_id) VALUES ($1, $2)',
+                        [newSite.id, productId]
+                    );
+                }
+            }
+
+            await client.query('COMMIT');
+            return newSite;
         } catch (error) {
+            await client.query('ROLLBACK');
             console.error('Error creating heritage site:', error);
             throw error;
+        } finally {
+            client.release();
         }
     }
 
@@ -485,26 +564,36 @@ class HeritageSite {
             const values = [];
             let paramIndex = 1;
 
-            // Build SET clause dynamically
-            Object.entries(siteData).forEach(([key, value]) => {
-                if (value !== undefined) {
-                    setClause.push(`${key} = $${paramIndex}`);
-                    values.push(value);
+            const fields = [
+                'name', 'location', 'district', 'state',
+                'description', 'short_description', 'category', 'subcategory', 'site_type',
+                'main_image', 'gallery_images', 'built_in', 'built_by', 'architectural_style',
+                'significance', 'entry_fee_indian', 'entry_fee_foreigner',
+                'opening_time', 'closing_time', 'best_time_to_visit', 'duration_required',
+                'contact_phone', 'contact_email', 'website',
+                'is_unesco', 'is_featured', 'is_active',
+                'tags', 'highlights', 'pickup_points',
+                'rating', 'total_reviews', 'views'
+            ];
+
+            fields.forEach(field => {
+                if (siteData[field] !== undefined) {
+                    setClause.push(`${field} = $${paramIndex}`);
+                    values.push(siteData[field]);
                     paramIndex++;
                 }
             });
 
             setClause.push(`updated_at = NOW()`);
-            
+            values.push(id);
+
             const query = `
-                UPDATE heritage_sites 
+                UPDATE heritage_sites
                 SET ${setClause.join(', ')}
                 WHERE id = $${paramIndex}
                 RETURNING *
             `;
-            
-            values.push(id);
-            
+
             const result = await db.query(query, values);
             return result.rows[0];
         } catch (error) {
@@ -513,16 +602,15 @@ class HeritageSite {
         }
     }
 
-    // Delete a heritage site (soft delete)
+    // Delete (soft delete) a heritage site
     static async delete(id) {
         try {
             const query = `
-                UPDATE heritage_sites 
+                UPDATE heritage_sites
                 SET is_active = false, updated_at = NOW()
                 WHERE id = $1
                 RETURNING id
             `;
-            
             const result = await db.query(query, [id]);
             return result.rows[0];
         } catch (error) {
@@ -546,7 +634,6 @@ class HeritageSite {
                 FROM heritage_sites
                 WHERE is_active = true
             `;
-            
             const result = await db.query(query);
             return result.rows[0];
         } catch (error) {
